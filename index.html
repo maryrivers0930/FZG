@@ -2343,14 +2343,14 @@ function buildAllViews(){
   const deals = getFilteredDeals();
   updateDataStatus(deals, allDeals);
   buildMultiSelects(allDeals);
-  buildCover(deals);
-  buildPortfolio(deals);
-  buildDimensionTab(deals);
-  buildTimeTab(deals);
-  buildRecoveryTab();
-  buildComputedMetrics(deals);
-  // Always rebuild Portfolio Performance so it stays in sync with sidebar filters
-  buildHistPerfTable();
+  try { buildCover(deals); } catch(e){ console.error('buildCover error:', e); }
+  try { buildPortfolio(deals); } catch(e){ console.error('buildPortfolio error:', e); }
+  try { buildDimensionTab(deals); } catch(e){ console.error('buildDimensionTab error:', e); }
+  try { buildTimeTab(deals); } catch(e){ console.error('buildTimeTab error:', e); }
+  try { buildRecoveryTab(); } catch(e){ console.error('buildRecoveryTab error:', e); }
+  try { buildComputedMetrics(deals); } catch(e){ console.error('buildComputedMetrics error:', e); }
+  // Pass the already-filtered dataset directly — single source of truth
+  buildHistPerfTable(deals);
   buildEntityList();
   buildUploadEntityLabel();
   buildPeriodList();
@@ -3556,7 +3556,7 @@ let PERF_MODE = 'live';
 
 function setPerfMode(mode){
   PERF_MODE = 'live';
-  buildHistPerfTable();
+  buildHistPerfTable(getFilteredDeals());
 }
 
 
@@ -3565,26 +3565,47 @@ function setHistCat(btn, cat){
   HIST_STATE.cat = cat;
   document.querySelectorAll('.hbtn[onclick*="setHistCat"]').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  buildHistPerfTable();
+  buildHistPerfTable(getFilteredDeals());
 }
 function setHistYear(btn, year){
   HIST_STATE.year = year;
   document.querySelectorAll('.hbtn[onclick*="setHistYear"]').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  buildHistPerfTable();
+  buildHistPerfTable(getFilteredDeals());
 }
 
-function buildHistPerfTable(){
+function buildHistPerfTable(deals){
+  // deals must be passed in — never re-derived internally so sidebar filters are always respected
+  if(!deals) deals = getFilteredDeals();
   const wrap = document.getElementById('histTblWrap');
   if(!wrap) return;
   const {cat, year} = HIST_STATE;
 
-  if(PERF_MODE === 'live'){
-    // Inherits all sidebar filters (date, ISO, period, status, etc.) via getFilteredDeals()
-    const deals = getFilteredDeals();
+  // Build active-filter summary for display inside the tab
+  const activeFilters = [];
+  if(STATE.filters.dateFrom||STATE.filters.dateTo) activeFilters.push((STATE.filters.dateFrom||'*')+' → '+(STATE.filters.dateTo||'*'));
+  if(MS_STATE.iso&&MS_STATE.iso.length) activeFilters.push('ISO: '+MS_STATE.iso.join(', '));
+  if(MS_STATE.wl&&MS_STATE.wl.length) activeFilters.push('White Label: '+MS_STATE.wl.join(', '));
+  if(MS_STATE.status&&MS_STATE.status.length) activeFilters.push('Status: '+MS_STATE.status.join(', '));
+  if(MS_STATE.period&&MS_STATE.period.length) activeFilters.push('Period: '+MS_STATE.period.join(', '));
+  if(MS_STATE.syndicator&&MS_STATE.syndicator.length) activeFilters.push('Syndicator: '+MS_STATE.syndicator.join(', '));
+  if(MS_STATE.engagement&&MS_STATE.engagement.length) activeFilters.push('Engagement: '+MS_STATE.engagement.join(', '));
+  if(MS_STATE.dtype&&MS_STATE.dtype.length) activeFilters.push('Deal Type: '+MS_STATE.dtype.join(', '));
+  if(MS_STATE.state&&MS_STATE.state.length) activeFilters.push('State: '+MS_STATE.state.join(', '));
+  if(STATE.filters.merchant) activeFilters.push('Search: "'+STATE.filters.merchant+'"');
+  if(STATE.filters.sizeMin||STATE.filters.sizeMax) activeFilters.push('Size: '+(STATE.filters.sizeMin||'0')+' – '+(STATE.filters.sizeMax||'∞'));
+  if(STATE.filters.factorMin||STATE.filters.factorMax) activeFilters.push('Factor: '+(STATE.filters.factorMin||'0')+' – '+(STATE.filters.factorMax||'∞'));
+  const filterBanner = activeFilters.length
+    ? `<div style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--purple)">
+        <b>Active Filters (${deals.length} deals):</b> ${activeFilters.join(' · ')}
+       </div>`
+    : `<div style="background:rgba(139,148,158,.08);border:1px solid rgba(139,148,158,.2);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+        No filters active — showing all ${deals.length} deals. Use the sidebar to filter.
+       </div>`;
 
+  if(PERF_MODE === 'live'){
     if(!deals.length){
-      wrap.innerHTML=`<div class="hist-no-data">No data for the selected filters<br><span style="font-size:12px;margin-top:8px;display:block">Upload a Closing Report or Advanced Funded Report to see computed metrics</span></div>`;
+      wrap.innerHTML=filterBanner+`<div class="hist-no-data">No data for the selected filters<br><span style="font-size:12px;margin-top:8px;display:block">Upload a Closing Report or Advanced Funded Report to see computed metrics</span></div>`;
       return;
     }
 
@@ -3680,11 +3701,11 @@ function buildHistPerfTable(){
       </tbody>
     </table>`;
 
-    wrap.innerHTML=html;
+    wrap.innerHTML=filterBanner+html;
     return;
   }
 
-  const catData = HIST_DATA[cat];
+  const catData = (typeof HIST_DATA !== 'undefined') ? HIST_DATA[cat] : null;
   if(!catData || !catData[year]){
     const avail = catData ? Object.keys(catData).join(', ') : 'none';
     wrap.innerHTML = `<div class="hist-no-data">No report data for <b>${cat} — ${year}</b><br><span style="font-size:12px;margin-top:8px;display:block">Available years: ${avail||'—'}</span></div>`;
@@ -3780,7 +3801,7 @@ function switchTab(t){
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf'){
-    buildHistPerfTable();
+    buildHistPerfTable(getFilteredDeals());
   }
 }
 
