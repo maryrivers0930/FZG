@@ -385,18 +385,18 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 
 <div id="main">
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('cover')">🏠 Dashboard</div>
+    <div class="tab active" onclick="switchTab('histperf')">📊 Portfolio Performance</div>
+    <div class="tab" onclick="switchTab('cover')">🏠 Dashboard</div>
     <div class="tab" onclick="switchTab('portfolio')">📊 Portfolio</div>
     <div class="tab" onclick="switchTab('dimensions')">🏷️ Dimensions</div>
     <div class="tab" onclick="switchTab('time')">📅 Time Analysis</div>
     <div class="tab" onclick="switchTab('recovery')">📈 Recovery Rates</div>
-    <div class="tab" onclick="switchTab('histperf')">📊 Portfolio Performance</div>
     <div class="tab" onclick="switchTab('upload')">📁 Data Upload</div>
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
   </div>
 
   <!-- ===== COVER / DASHBOARD TAB ===== -->
-  <div id="tab-cover" class="tab-content active">
+  <div id="tab-cover" class="tab-content">
     <!-- Hero strip -->
     <div id="coverHero" style="background:linear-gradient(135deg,#1c1f2e 0%,#161b22 100%);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:16px">
       <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
@@ -414,19 +414,23 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <span style="font-size:11px;color:var(--muted)">Toggle to exclude statistical outliers (3×IQR) from recovery rate</span>
     </div>
 
-    <!-- Outlier Distribution Chart -->
+    <!-- Deal Volume Chart (Factor Rate Bucket / Funding Amount toggle) -->
     <div id="outlierChartSection" class="section" style="margin-bottom:12px;padding:12px">
       <div class="section-hdr" style="margin-bottom:10px">
-        <span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span>
+        <span class="section-title" style="font-size:12px" id="dealVolChartTitle">Deal Funded Volume by Factor Rate Bucket</span>
         <span class="section-sub" id="outlierChartSub"></span>
+        <div style="display:flex;gap:4px;margin-left:auto">
+          <button id="volToggleFactor" class="btn btn-ghost btn-sm active" style="font-size:11px" onclick="setDealVolView('factor')">Factor Rate Bucket</button>
+          <button id="volToggleSize"   class="btn btn-ghost btn-sm"        style="font-size:11px" onclick="setDealVolView('size')">Funding Amount</button>
+        </div>
       </div>
       <div id="dealSizeDistChart" style="width:100%"></div>
       <div id="outlierControls" style="display:none;margin-top:10px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button id="outlierListToggleBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleOutlierList()">Show Outlier Details</button>
-          <div id="outlierBucketBtns" style="display:none;display:flex;gap:4px;flex-wrap:wrap"></div>
+          <div id="outlierBucketBtns" style="display:flex;gap:4px;flex-wrap:wrap;display:none"></div>
         </div>
-        <div id="outlierDealList" style="margin-top:8px"></div>
+        <div id="outlierDealList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
 
@@ -728,7 +732,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
   </div>
 
   <!-- ===== HISTORICAL PERFORMANCE TAB ===== -->
-  <div id="tab-histperf" class="tab-content">
+  <div id="tab-histperf" class="tab-content active">
     <!-- Live (computed) mode selectors -->
 
     <div class="hist-tbl-wrap" id="histTblWrap"></div>
@@ -1940,6 +1944,7 @@ let MS_STATE = {syndicator:[], iso:[], wl:[], dtype:[], status:[], period:[], en
 // ============================================================
 let EXCLUDED_DEAL_IDS = new Set();
 let OUTLIER_BUCKET_STATS = []; // current outlier buckets for detail panel
+let DEAL_VOL_VIEW = 'factor'; // 'factor' | 'size'
 
 let _exclusionAllDeals = []; // full sorted deal list — ALL deals, no cap
 
@@ -2303,7 +2308,8 @@ function sizeBucket(amt){
   if(amt<100000) return '$50K–$100K';
   if(amt<250000) return '$100K–$250K';
   if(amt<500000) return '$250K–$500K';
-  return '$500K+';
+  if(amt<1000000) return '$500K–$1M';
+  return '$1M+';
 }
 // Tier grouping: total / under $500K / $500K-$1M / over $1M
 function tierBucket(amt){
@@ -2654,6 +2660,11 @@ function buildCover(deals){
   const renewedExcess=renewedDeals.reduce((a,d)=>a+(d.collected-d.rtr),0);
   const pureCollected=deals.reduce((a,d)=>a+Math.min(d.collected,d.rtr),0);
 
+  // Sync toggle button active state
+  const vbF=document.getElementById('volToggleFactor'), vbS=document.getElementById('volToggleSize');
+  if(vbF) vbF.classList.toggle('active', DEAL_VOL_VIEW==='factor');
+  if(vbS) vbS.classList.toggle('active', DEAL_VOL_VIEW==='size');
+
   // Factor Rate Bucket Chart + Outlier List
   (()=>{
     const el = document.getElementById('dealSizeDistChart');
@@ -2668,61 +2679,105 @@ function buildCover(deals){
       : 'No outliers detected';
 
     const fmtK = v => v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v);
-    const maxFunded = Math.max(...bucketStats.map(b=>b.totalFunded), 1);
 
-    // Chart: one row per factor bucket
-    const rows = bucketStats.map(b=>{
-      const hasOutlier = b.outliers.length>0;
-      const barPct = (b.totalFunded/maxFunded*100).toFixed(1);
-      const barCol = hasOutlier ? 'rgba(248,81,73,0.75)' : 'rgba(139,92,246,0.75)';
-      const recRate = b.totalFunded>0 ? (b.deals.reduce((a,d)=>a+d.collected,0)/b.totalFunded*100).toFixed(0)+'%' : '—';
-      const recColor = recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
-      return '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:5px 8px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
-        +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
-        +'<div style="position:relative;height:15px;background:rgba(139,92,246,0.1);border-radius:3px;overflow:hidden">'
-          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:'+barCol+';border-radius:3px"></div>'
-        +'</div>'
-        +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
-        +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
-        +'<span style="font-size:11px;color:'+recColor+';text-align:right">'+recRate+'</span>'
-        +'</div>';
-    }).join('');
+    // Update chart title to match active view
+    const titleEl = document.getElementById('dealVolChartTitle');
+    if(titleEl) titleEl.textContent = DEAL_VOL_VIEW==='size'
+      ? 'Deal Funded Volume by Funding Amount'
+      : 'Deal Funded Volume by Factor Rate Bucket';
 
-    el.innerHTML = !bucketStats.length
-      ? '<div style="color:#8b949e;font-size:12px;padding:12px 0">No deals with factor rates loaded.</div>'
-      : '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:5px 8px;padding:0 0 5px;border-bottom:1px solid rgba(139,148,158,0.15);margin-bottom:3px">'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;padding-right:6px;text-transform:uppercase">Factor</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-transform:uppercase">Volume</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Deals</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recovery</span>'
-        +'</div>'+rows
-        +'<div style="margin-top:5px;font-size:10px;color:#8b949e;display:flex;gap:14px">'
-          +'<span style="color:#a78bfa">&#9632; Normal bucket</span>'
-          +(allOutlierDeals.length>0?'<span style="color:#f85149">&#9632; Contains outlier(s)</span>':'')
-          +'<span style="margin-left:auto">'+deals.length+' deals</span>'
-        +'</div>';
+    if(DEAL_VOL_VIEW==='size'){
+      // ── Funding Amount view ──
+      const sizeMap = {};
+      const ORDER = ['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K–$1M','$1M+'];
+      deals.forEach(d=>{
+        const b = sizeBucket(d.amount);
+        if(!sizeMap[b]) sizeMap[b]={label:b,count:0,totalFunded:0,totalColl:0};
+        sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; sizeMap[b].totalColl+=d.collected;
+      });
+      const sBuckets = ORDER.map(l=>sizeMap[l]).filter(Boolean);
+      const maxF2 = Math.max(...sBuckets.map(b=>b.totalFunded),1);
+      const sRows = sBuckets.map(b=>{
+        const barPct=(b.totalFunded/maxF2*100).toFixed(1);
+        const recRate=b.totalFunded>0?(b.totalColl/b.totalFunded*100).toFixed(0)+'%':'—';
+        const recColor=recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
+        return '<div style="display:grid;grid-template-columns:80px 1fr 44px 90px 70px;gap:5px 8px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
+          +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
+          +'<div style="position:relative;height:15px;background:rgba(88,166,255,0.1);border-radius:3px;overflow:hidden">'
+            +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:rgba(88,166,255,0.75);border-radius:3px"></div>'
+          +'</div>'
+          +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
+          +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
+          +'<span style="font-size:11px;color:'+recColor+';text-align:right">'+recRate+'</span>'
+          +'</div>';
+      }).join('');
+      el.innerHTML = !sBuckets.length
+        ? '<div style="color:#8b949e;font-size:12px;padding:12px 0">No deals loaded.</div>'
+        : '<div style="display:grid;grid-template-columns:80px 1fr 44px 90px 70px;gap:5px 8px;padding:0 0 5px;border-bottom:1px solid rgba(139,148,158,0.15);margin-bottom:3px">'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;padding-right:6px;text-transform:uppercase">Size</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-transform:uppercase">Volume</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Deals</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recovery</span>'
+          +'</div>'+sRows
+          +'<div style="margin-top:5px;font-size:10px;color:#8b949e;display:flex;gap:14px">'
+            +'<span style="color:#58a6ff">&#9632; Funding amount bucket</span>'
+            +'<span style="margin-left:auto">'+deals.length+' deals</span>'
+          +'</div>';
+      // Hide outlier controls in size view
+      const ctrlEl2=document.getElementById('outlierControls');
+      if(ctrlEl2) ctrlEl2.style.display='none';
+    } else {
+      // ── Factor Rate Bucket view (original) ──
+      const maxFunded = Math.max(...bucketStats.map(b=>b.totalFunded), 1);
+      const rows = bucketStats.map(b=>{
+        const hasOutlier = b.outliers.length>0;
+        const barPct = (b.totalFunded/maxFunded*100).toFixed(1);
+        const barCol = hasOutlier ? 'rgba(248,81,73,0.75)' : 'rgba(139,92,246,0.75)';
+        const recRate = b.totalFunded>0 ? (b.deals.reduce((a,d)=>a+d.collected,0)/b.totalFunded*100).toFixed(0)+'%' : '—';
+        const recColor = recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
+        return '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:5px 8px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
+          +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
+          +'<div style="position:relative;height:15px;background:rgba(139,92,246,0.1);border-radius:3px;overflow:hidden">'
+            +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:'+barCol+';border-radius:3px"></div>'
+          +'</div>'
+          +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
+          +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
+          +'<span style="font-size:11px;color:'+recColor+';text-align:right">'+recRate+'</span>'
+          +'</div>';
+      }).join('');
+      el.innerHTML = !bucketStats.length
+        ? '<div style="color:#8b949e;font-size:12px;padding:12px 0">No deals with factor rates loaded.</div>'
+        : '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:5px 8px;padding:0 0 5px;border-bottom:1px solid rgba(139,148,158,0.15);margin-bottom:3px">'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;padding-right:6px;text-transform:uppercase">Factor</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-transform:uppercase">Volume</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Deals</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
+            +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recovery</span>'
+          +'</div>'+rows
+          +'<div style="margin-top:5px;font-size:10px;color:#8b949e;display:flex;gap:14px">'
+            +'<span style="color:#a78bfa">&#9632; Normal bucket</span>'
+            +(allOutlierDeals.length>0?'<span style="color:#f85149">&#9632; Contains outlier(s)</span>':'')
+            +'<span style="margin-left:auto">'+deals.length+' deals</span>'
+          +'</div>';
 
-    // Outlier controls: show/hide toggle button + bucket selector
-    const ctrlEl = document.getElementById('outlierControls');
-    const bucketBtnsEl = document.getElementById('outlierBucketBtns');
-    // Reset toggle state when view rebuilds
-    const listToggleBtn = document.getElementById('outlierListToggleBtn');
-    if(listToggleBtn){ listToggleBtn.dataset.open='0'; listToggleBtn.textContent='Show Outlier Details'; }
-    if(ctrlEl){
-      if(!allOutlierDeals.length){
-        ctrlEl.style.display='none';
-        const listEl2 = document.getElementById('outlierDealList');
-        if(listEl2) listEl2.innerHTML='';
-      } else {
-        ctrlEl.style.display='';
-        // Build bucket selector buttons (only buckets with outliers)
-        const outlierBuckets = bucketStats.filter(b=>b.outliers.length>0);
-        if(bucketBtnsEl){
-          OUTLIER_BUCKET_STATS = outlierBuckets; // store for toggle function
+      // Outlier controls: show/hide toggle button + bucket selector
+      const ctrlEl = document.getElementById('outlierControls');
+      const bucketBtnsEl = document.getElementById('outlierBucketBtns');
+      const listToggleBtn = document.getElementById('outlierListToggleBtn');
+      if(listToggleBtn){ listToggleBtn.dataset.open='0'; listToggleBtn.textContent='Show Outlier Details'; }
+      if(ctrlEl){
+        if(!allOutlierDeals.length){
+          ctrlEl.style.display='none';
+          const listEl2 = document.getElementById('outlierDealList');
+          if(listEl2) listEl2.innerHTML='';
+        } else {
+          ctrlEl.style.display='';
+          const outlierBuckets = bucketStats.filter(b=>b.outliers.length>0);
+          if(bucketBtnsEl) OUTLIER_BUCKET_STATS = outlierBuckets;
         }
       }
-    }
+    } // end factor view
   })();
 
     // Update outlier button
@@ -2952,6 +3007,13 @@ function buildCoverMoM(deals, periods){
 // ============================================================
 // PORTFOLIO TAB — company metrics, syndicator as filter panel
 // ============================================================
+function setDealVolView(v){
+  DEAL_VOL_VIEW = v;
+  document.getElementById('volToggleFactor').classList.toggle('active', v==='factor');
+  document.getElementById('volToggleSize').classList.toggle('active', v==='size');
+  buildAllViews();
+}
+
 function toggleOutlierList(){
   const btn = document.getElementById('outlierListToggleBtn');
   const bucketEl = document.getElementById('outlierBucketBtns');
@@ -2991,14 +3053,30 @@ function renderOutlierBucket(idx){
   });
   const fmtK = v => v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v);
   const sorted = [...b.outliers].sort((a,c)=>c.amount-a.amount);
-  const ids = sorted.map(d=>d.dealId||d.id).join(', ');
   listEl.innerHTML = '<div style="margin-top:6px;padding:10px;background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.2);border-radius:6px">'
     +'<div style="font-size:11px;color:#e3b341;font-weight:600;margin-bottom:8px">'
       +'Factor '+b.label+' — '+sorted.length+' outlier'+(sorted.length>1?'s':'')+' · bucket median: '+fmtK(b.median)
     +'</div>'
-    +'<div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Deal ID'+(sorted.length>1?'s':'')+'</div>'
-    +'<div style="font-size:13px;font-weight:700;color:#f85149;line-height:1.8;word-break:break-all">'+ids+'</div>'
-    +'</div>';
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="border-bottom:1px solid rgba(139,148,158,0.2)">'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Deal ID</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Entity Name</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Whitelabel</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Funded Date</th>'
+    +'<th style="text-align:right;padding:3px 8px;color:#8b949e;font-weight:500">Funding Amt</th>'
+    +'<th style="text-align:right;padding:3px 8px;color:#8b949e;font-weight:500">RTR</th>'
+    +'</tr></thead><tbody>'
+    +sorted.map(d=>'<tr style="border-bottom:1px solid rgba(139,148,158,0.07)">'
+      +'<td style="padding:3px 8px;color:#f85149;font-weight:600">'+(d.dealId||d.id||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#e6edf3">'+(d.merchant||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#8b949e">'+(d.whiteLabel||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#8b949e">'+(d.fundedDate||'—')+'</td>'
+      +'<td style="padding:3px 8px;text-align:right;color:#c084fc">'+fmtK(d.amount)+'</td>'
+      +'<td style="padding:3px 8px;text-align:right;color:#58a6ff">'+fmtK(d.rtr)+'</td>'
+      +'</tr>'
+    ).join('')
+    +'</tbody></table></div></div>';
 }
 
 function buildPortfolio(deals){
@@ -3329,221 +3407,117 @@ function buildTimeTab(deals){
 // RECOVERY RATES TAB
 // ============================================================
 function buildRecoveryTab(){
-  // ── 1. Get data ───────────────────────────────────────────
-  const deals = getRecoveryDeals();
-  const ent   = activeEntity();
+  const deals = getFilteredDeals();
+  const ent = activeEntity();
   const kpiEl = document.getElementById('recKpiRow');
   const tblEl = document.getElementById('recTable');
   const defEl = document.getElementById('recDefaultTable');
   if(!kpiEl) return;
 
-  const hasSl = deals.length && deals.some(d=>d._srcType==='sl');
-  const dataSrc = hasSl ? 'Syndication Report' : 'Closing / Funded Report';
-
-  // Empty state — always update so stale placeholder is cleared
+  // Always clear stale placeholder
   if(!deals.length){
-    kpiEl.innerHTML=`<div style="padding:32px;text-align:center;width:100%;color:var(--muted)">
-      <div style="font-size:28px;margin-bottom:8px">📈</div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:4px">No data for current filters</div>
-      <div style="font-size:12px">Upload a Closing Report, Advance Funded Report, or Syndication Report,<br>or adjust the sidebar filters to see recovery rate analytics.</div>
-    </div>`;
+    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload Closing Report or Advance Funded Report data to see recovery rate analytics</div>';
     if(tblEl) tblEl.innerHTML='';
     if(defEl) defEl.innerHTML='';
     destroyChart('recChart');
     return;
   }
 
-  // ── 2. Aggregate by period (respects groupBy: monthly / quarterly / yearly) ──
-  const grp = STATE.groupBy || 'month';  // 'month' | 'quarter' | 'year'
+  // Aggregate by funded month (YYYY-MM key)
   const byPeriod = {};
   deals.forEach(d => {
-    const key = periodKey(d.fundedDate, grp);
-    if(!byPeriod[key]) byPeriod[key] = {
-      key, label: periodLabel(d.fundedDate, grp),
-      funded:0, commission:0, bankFee:0,
-      cashColl:0, nonCashColl:0, totalColl:0,
-      rtr:0, remaining:0, defaultAmt:0, deals:0
-    };
-    const r = byPeriod[key];
-    r.funded      += (d.amount     || 0);
-    r.commission  += (d.commission || 0);
-    r.bankFee     += (d.merchantBankFee || 0);
-    r.cashColl    += (d.collected  || 0);
-    r.nonCashColl += (d.nonCashColl|| 0);
-    r.rtr         += (d.rtr        || 0);
-    r.remaining   += (d.remaining  || 0);
-    r.deals++;
-    if(isDefault(d.status)) r.defaultAmt += (d.amount||0);
+    const p = d.fundedDate ? d.fundedDate.slice(0,7) : (d._period||'unknown');
+    if(!byPeriod[p]) byPeriod[p] = {period:p, funded:0, collected:0, rtr:0, defaultAmt:0, deals:0, origination:0, commission:0};
+    const r = byPeriod[p];
+    r.funded += d.amount; r.collected += d.collected; r.rtr += d.rtr; r.deals++;
+    r.origination += (d.origination||0); r.commission += (d.commission||0);
+    if(isDefault(d.status)) r.defaultAmt += d.amount;
   });
 
-  // ── 3. Compute Recovery Rate per period ───────────────────
-  // Reference FS Summary:
-  //   Upfront TPC (row 179) = Funded + Commission − Merchant Bank Fee
-  //   Total Collected (row 182) = Cash Coll + Non-Cash Coll
-  //   Recovery Rate (row 214) = Total Collected / Upfront TPC
-  let hist = Object.values(byPeriod)
-    .sort((a,b) => a.key > b.key ? 1 : -1)
-    .filter(r => r.funded > 0 || r.deals > 0);
-
+  // Recovery Rate = Collected ÷ (Funded − Origination + Commission)  [reference formula]
+  let hist = Object.values(byPeriod).sort((a,b)=>a.period>b.period?1:-1).filter(r=>r.funded>0);
   hist.forEach(r => {
-    r.totalColl  = r.cashColl + r.nonCashColl;
-    r.upfrontTPC = r.funded + r.commission - r.bankFee;
-    r.rate = r.upfrontTPC > 0 ? r.totalColl / r.upfrontTPC : (r.funded > 0 ? r.totalColl / r.funded : 0);
+    const denom = r.funded - (r.origination||0) + (r.commission||0);
+    r.rate = denom > 0 ? r.collected / denom : 0;
   });
 
   // Merge manual snapshots for periods not covered by deal data
   (ent.recoveryHistory||[]).forEach(h => {
-    if(!byPeriod[h.period]){
-      const tpc = (h.funded||0) + (h.commission||0) - (h.bankFee||0);
-      hist.push({
-        key: h.period, label: h.period,
-        funded: h.funded||h.rtr||0, commission:0, bankFee:0,
-        cashColl: h.collected||0, nonCashColl:0,
-        totalColl: h.collected||0,
-        rtr: h.rtr||0, remaining:0, defaultAmt: h.defaultAmt||0, deals:0,
-        upfrontTPC: tpc || h.rtr||0,
-        rate: h.rate||0
-      });
-    }
+    if(!byPeriod[h.period])
+      hist.push({period:h.period, funded:h.rtr||0, collected:h.collected||0, rtr:h.rtr||0, defaultAmt:h.defaultAmt||0, deals:0, rate:h.rate||0});
   });
-  hist.sort((a,b) => a.key > b.key ? 1 : -1);
+  hist.sort((a,b)=>a.period>b.period?1:-1);
 
-  // ── 4. Overall totals ─────────────────────────────────────
-  const totFunded    = hist.reduce((s,h)=>s+h.funded,0);
-  const totComm      = hist.reduce((s,h)=>s+h.commission,0);
-  const totBankFee   = hist.reduce((s,h)=>s+h.bankFee,0);
-  const totCash      = hist.reduce((s,h)=>s+h.cashColl,0);
-  const totNonCash   = hist.reduce((s,h)=>s+h.nonCashColl,0);
-  const totCollected = totCash + totNonCash;
-  const totTPC       = totFunded + totComm - totBankFee;
-  const overallRate  = totTPC > 0 ? totCollected / totTPC : (totFunded > 0 ? totCollected / totFunded : 0);
+  if(!hist.length){
+    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload LendSaaS data to see recovery rate analytics</div>';
+    return;
+  }
 
-  // ── 5. Latest period & MoM (ref rows 214, 215) ───────────
   const last = hist[hist.length-1];
-  const prev = hist.length > 1 ? hist[hist.length-2] : null;
-  const momDelta = prev ? last.rate - prev.rate : 0;
-  const momPct   = prev && prev.rate ? momDelta / prev.rate : 0;
-  const grpLabel = grp==='quarter' ? 'QoQ' : grp==='year' ? 'YoY' : 'MoM';
+  const prev = hist.length>1 ? hist[hist.length-2] : null;
+  const delta = prev ? last.rate-prev.rate : 0;
+  const deltaPct = prev && prev.rate ? delta/prev.rate : 0;
 
-  // ── 6. KPI cards ──────────────────────────────────────────
-  kpiEl.innerHTML =
-    `<div style="grid-column:1/-1;padding:2px 0 6px;font-size:11px;color:var(--muted)">` +
-    `Data source: <b style="color:var(--fg)">${dataSrc}</b> · ` +
-    `${deals.length} deals · ${hist.length} period${hist.length!==1?'s':''} · ` +
-    `View: <b style="color:var(--fg)">${grp==='quarter'?'Quarterly':grp==='year'?'Annual':'Monthly'}</b> · ` +
-    `Formula: (Cash+NonCash Coll) ÷ (Funded+Comm−BankFee)</div>` +
-    [
-      {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%',
-       sub:'Total Coll '+fmtFull$(totCollected)+' ÷ TPC '+fmtFull$(totTPC), c:'var(--green)'},
-      {label:`Latest Period (${last.label})`, val:(last.rate*100).toFixed(2)+'%',
-       sub:'TPC '+fmtFull$(last.upfrontTPC)+' · Coll '+fmtFull$(last.totalColl), c:'var(--blue)'},
-      {label:grpLabel+' Change (pts)', val:(momDelta>=0?'+':'')+((momDelta)*100).toFixed(2)+'pp',
-       sub: prev ? prev.label+' → '+last.label : 'No previous period',
-       c: momDelta>=0?'var(--green)':'var(--red)'},
-      {label:grpLabel+' % Change', val:(momPct>=0?'+':'')+((momPct*100).toFixed(2))+'%',
-       sub:'(Current−Prev)÷Prev · ref row 215',
-       c: momPct>=0?'var(--green)':'var(--red)'},
-    ].map(k=>`<div class="rec-card">
-      <div class="rec-label">${k.label}</div>
-      <div class="rec-val" style="color:${k.c}">${k.val}</div>
-      <div class="rec-sub">${k.sub}</div>
-    </div>`).join('');
+  // Overall rate across all filtered deals
+  const totalFunded = deals.reduce((a,d)=>a+d.amount,0);
+  const totalColl   = deals.reduce((a,d)=>a+d.collected,0);
+  const totalOrig   = deals.reduce((a,d)=>a+(d.origination||0),0);
+  const totalComm   = deals.reduce((a,d)=>a+(d.commission||0),0);
+  const overallDenom = totalFunded - totalOrig + totalComm;
+  const overallRate  = overallDenom > 0 ? totalColl / overallDenom : 0;
 
-  // ── 7. Chart ──────────────────────────────────────────────
-  const chartLabels  = hist.map(h=>h.label);
-  const chartRates   = hist.map(h=>parseFloat((h.rate*100).toFixed(4)));
-  const chartCollect = hist.map(h=>parseFloat((h.totalColl/1000).toFixed(1)));
+  kpiEl.innerHTML=[
+    {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded − Orig + Comm) (all periods)', c:'var(--green)'},
+    {label:'Latest Period Rate',    val:(last.rate*100).toFixed(2)+'%',   sub:last.period, c:'var(--blue)'},
+    {label:'MoM Change',            val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%', sub:'Rate point change', c:delta>=0?'var(--green)':'var(--red)'},
+    {label:'% Change',              val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)), sub:'MoM percent change', c:deltaPct>=0?'var(--green)':'var(--red)'},
+  ].map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
 
   makeChart('recChart','line',{
-    labels: chartLabels,
-    datasets:[
-      {label:'Recovery Rate %', data:chartRates,
-       borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.12)',
-       fill:true, tension:.35, pointRadius:4, yAxisID:'yRate'},
-      {label:'Total Collections ($K)', data:chartCollect,
-       borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.08)',
-       fill:false, tension:.35, pointRadius:3, borderDash:[4,3], yAxisID:'yColl'},
-    ]
-  },{
-    extra:{
-      scales:{
-        yRate:{position:'left',  ticks:{color:'#8b949e',font:{size:10},callback:v=>v.toFixed(1)+'%'}, grid:{color:'rgba(48,54,61,.6)'}},
-        yColl:{position:'right', ticks:{color:'#8b949e',font:{size:10},callback:v=>'$'+v+'K'},       grid:{display:false}},
-        x:    {ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,.6)'}},
-      }
-    }
-  });
+    labels:hist.map(h=>h.period),
+    datasets:[{
+      label:'Recovery Rate %', data:hist.map(h=>+(h.rate*100).toFixed(2)),
+      borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.15)', fill:true, tension:.3, pointRadius:4,
+    }]
+  },{yFmt:v=>v.toFixed(1)+'%'});
 
-  // ── 8. MoM/QoQ table (ref rows 214, 215) ─────────────────
-  const tblRows = [...hist].reverse(); // newest first
-  if(tblEl) tblEl.innerHTML =
-    `<thead><tr>
-      <th>Period</th>
-      <th>Recovery Rate</th>
-      <th>Prev Rate</th>
-      <th>${grpLabel} Chg (pts)</th>
-      <th>${grpLabel} % Chg</th>
-      <th>Upfront TPC</th>
-      <th>Cash Coll</th>
-      <th>Non-Cash Coll</th>
-      <th>Total Coll</th>
-      <th>Funded</th>
-      <th>Comm</th>
-      <th>Bank Fee</th>
-      <th>Deals</th>
-      <th>Default Amt</th>
-    </tr></thead><tbody>${tblRows.map((h,i)=>{
-      const prevH = tblRows[i+1];
-      const chgPt = prevH != null ? h.rate - prevH.rate : null;
-      const chgPct= prevH && prevH.rate ? chgPt / prevH.rate : null;
-      return `<tr>
-        <td><b>${h.label}</b></td>
-        <td><b style="color:${h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)'}">${(h.rate*100).toFixed(2)}%</b></td>
-        <td>${prevH != null ? (prevH.rate*100).toFixed(2)+'%' : '—'}</td>
-        <td class="${chgPt===null?'neu':chgPt>=0?'up':'down'}">${chgPt===null?'—':(chgPt>=0?'+':'')+((chgPt)*100).toFixed(2)+'pp'}</td>
-        <td class="${chgPct===null?'neu':chgPct>=0?'up':'down'}">${chgPct===null?'—':(chgPct>=0?'+':'')+((chgPct*100).toFixed(2))+'%'}</td>
-        <td>${fmtFull$(h.upfrontTPC||0)}</td>
-        <td>${fmtFull$(h.cashColl||0)}</td>
-        <td>${fmtFull$(h.nonCashColl||0)}</td>
-        <td><b>${fmtFull$(h.totalColl||0)}</b></td>
-        <td>${fmtFull$(h.funded||0)}</td>
-        <td>${fmtFull$(h.commission||0)}</td>
-        <td>${fmtFull$(h.bankFee||0)}</td>
-        <td>${h.deals||'—'}</td>
-        <td class="${h.defaultAmt>0?'down':''}">${h.defaultAmt>0?fmtFull$(h.defaultAmt):'—'}</td>
-      </tr>`;
-    }).join('')}</tbody>`;
+  // MoM table — newest first
+  const rows=[...hist].reverse();
+  if(tblEl) tblEl.innerHTML=`<thead><tr>
+    <th>Period</th><th>Recovery Rate</th><th>Previous Rate</th>
+    <th>Change (pts)</th><th>% Change</th><th>Funded</th><th>Collected</th><th>Default Amt</th>
+  </tr></thead><tbody>${rows.map((h,i)=>{
+    const prevH=rows[i+1];
+    const d=prevH?h.rate-prevH.rate:null;
+    const dp=prevH&&prevH.rate?d/prevH.rate:null;
+    return `<tr>
+      <td><b>${h.period}</b></td>
+      <td><b style="color:${h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)'}">${(h.rate*100).toFixed(2)}%</b></td>
+      <td>${prevH?(prevH.rate*100).toFixed(2)+'%':'—'}</td>
+      <td class="${d===null?'neu':d>=0?'up':'down'}">${d===null?'—':(d>=0?'+':'')+((d)*100).toFixed(2)+'%'}</td>
+      <td class="${dp===null?'neu':dp>=0?'up':'down'}">${dp===null?'—':(dp>=0?'+':'')+fmtPct(Math.abs(dp))}</td>
+      <td>${fmtFull$(h.funded)}</td>
+      <td>${fmtFull$(h.collected)}</td>
+      <td class="${h.defaultAmt>0?'down':''}">${h.defaultAmt?fmtFull$(h.defaultAmt):'—'}</td>
+    </tr>`;
+  }).join('')}</tbody>`;
 
-  // ── 9. Default & Collection breakdown by status ───────────
+  // Default & Collection breakdown by status
   if(defEl && deals.length){
-    const statusMap={};
+    const statusData={};
     deals.forEach(d=>{
       const s=d.status||'Unknown';
-      if(!statusMap[s]) statusMap[s]={status:s,deals:0,funded:0,collected:0,nonCash:0,remaining:0};
-      statusMap[s].deals++;
-      statusMap[s].funded    +=(d.amount||0);
-      statusMap[s].collected +=(d.collected||0);
-      statusMap[s].nonCash   +=(d.nonCashColl||0);
-      statusMap[s].remaining +=(d.remaining||0);
+      if(!statusData[s]) statusData[s]={status:s,deals:0,funded:0};
+      statusData[s].deals++; statusData[s].funded+=d.amount;
     });
-    const totalF=deals.reduce((a,d)=>a+(d.amount||0),0);
-    const totalC=deals.reduce((a,d)=>a+(d.collected||0)+(d.nonCashColl||0),0);
-    const sRows=Object.values(statusMap).sort((a,b)=>b.funded-a.funded);
+    const totalF=deals.reduce((a,d)=>a+d.amount,0);
+    const sRows=Object.values(statusData).sort((a,b)=>b.funded-a.funded);
     defEl.innerHTML=`<thead><tr>
-      <th>Status</th><th>Deals</th><th>% Deals</th>
-      <th>Funded</th><th>% Portfolio</th>
-      <th>Cash Coll</th><th>Non-Cash Coll</th><th>Total Coll</th>
-      <th>Remaining</th>
+      <th>Status</th><th>Deals</th><th>% of Deals</th><th>Funded</th><th>% of Portfolio</th>
     </tr></thead><tbody>${sRows.map(r=>`<tr>
       <td><span class="badge ${isPerforming(r.status)?'badge-green':isDefault(r.status)?'badge-red':isSlowPay(r.status)?'badge-orange':'badge-yellow'}">${r.status}</span></td>
-      <td>${r.deals}</td>
-      <td>${fmtPct(r.deals/deals.length)}</td>
-      <td>${fmtFull$(r.funded)}</td>
-      <td>${fmtPct(totalF?r.funded/totalF:0)}</td>
-      <td>${fmtFull$(r.collected)}</td>
-      <td>${fmtFull$(r.nonCash)}</td>
-      <td>${fmtFull$(r.collected+r.nonCash)}</td>
-      <td>${fmtFull$(r.remaining)}</td>
+      <td>${r.deals}</td><td>${fmtPct(r.deals/deals.length)}</td>
+      <td>${fmtFull$(r.funded)}</td><td>${fmtPct(r.funded/totalF)}</td>
     </tr>`).join('')}</tbody>`;
   }
 }
@@ -3972,7 +3946,7 @@ function switchTab(t){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const tc=document.getElementById('tab-'+t); if(tc) tc.classList.add('active');
-  const tabs=['cover','portfolio','dimensions','time','recovery','histperf','upload','share'];
+  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','upload','share'];
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
