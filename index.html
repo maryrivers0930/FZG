@@ -2033,25 +2033,32 @@ function updateExcludedCount(){
   if(el) el.textContent=EXCLUDED_DEAL_IDS.size;
 }
 
-// Returns filtered deals for the Recovery Tab. Uses sl (Syndication) data if available,
-// otherwise falls back to ls/af data. Applies the same sidebar filters.
+// Returns filtered deals for the Recovery Tab.
+// Includes all report types (sl, ls, af) — sl preferred when available.
+// Applies identical sidebar filters as getFilteredDeals.
 function getRecoveryDeals(){
   const ent = activeEntity(); if(!ent) return [];
   const dbp = ent.dealsByPeriod||{};
   const selectedPeriods = MS_STATE.period&&MS_STATE.period.length ? MS_STATE.period : Object.keys(dbp);
-  let allPeriodDeals = selectedPeriods.flatMap(p=>dbp[p]||[]);
-  // Prefer sl data when present (reference methodology uses Syndication Report columns)
-  const slDeals = allPeriodDeals.filter(d => d._srcType === 'sl' && d.merchant && d.fundedDate);
-  const lsAfDeals = allPeriodDeals.filter(d => (d._srcType === 'ls' || d._srcType === 'af') && d.merchant && d.fundedDate);
+  let all = selectedPeriods.flatMap(p=>dbp[p]||[]).filter(d=>d.merchant&&d.fundedDate);
+  // Use Syndication (sl) data when available — reference methodology is built on it.
+  // Fall back to ls/af when no sl records exist.
+  const slDeals  = all.filter(d=>d._srcType==='sl');
+  const lsAfDeals= all.filter(d=>d._srcType==='ls'||d._srcType==='af');
   let deals = slDeals.length > 0 ? slDeals : lsAfDeals;
-  // Apply sidebar filters
+  // Apply all sidebar filters (mirrors getFilteredDeals)
   const f = STATE.filters;
   if(f.dateFrom) deals = deals.filter(d=>d.fundedDate>=f.dateFrom);
-  if(f.dateTo) deals = deals.filter(d=>d.fundedDate<=f.dateTo);
-  if(MS_STATE.syndicator&&MS_STATE.syndicator.length) deals = deals.filter(d=>MS_STATE.syndicator.includes(d.syndicator));
-  if(MS_STATE.iso&&MS_STATE.iso.length) deals = deals.filter(d=>MS_STATE.iso.includes(d.iso));
-  if(MS_STATE.status&&MS_STATE.status.length) deals = deals.filter(d=>MS_STATE.status.includes(d.status));
-  if(EXCLUDED_DEAL_IDS.size>0) deals = deals.filter(d=>!EXCLUDED_DEAL_IDS.has(d.id));
+  if(f.dateTo)   deals = deals.filter(d=>d.fundedDate<=f.dateTo);
+  if(MS_STATE.syndicator&&MS_STATE.syndicator.length) deals=deals.filter(d=>MS_STATE.syndicator.includes(d.syndicator));
+  if(MS_STATE.iso&&MS_STATE.iso.length)   deals=deals.filter(d=>MS_STATE.iso.includes(d.iso));
+  if(MS_STATE.wl&&MS_STATE.wl.length)     deals=deals.filter(d=>MS_STATE.wl.includes(d.whiteLabel));
+  if(MS_STATE.dtype&&MS_STATE.dtype.length) deals=deals.filter(d=>MS_STATE.dtype.includes(d.dealType));
+  if(MS_STATE.status&&MS_STATE.status.length) deals=deals.filter(d=>MS_STATE.status.includes(d.status));
+  if(f.sizeMin) deals=deals.filter(d=>d.amount>=parseFloat(f.sizeMin));
+  if(f.sizeMax) deals=deals.filter(d=>d.amount<=parseFloat(f.sizeMax));
+  if(f.merchant){ const q=f.merchant.toLowerCase(); deals=deals.filter(d=>d.merchant.toLowerCase().includes(q)||(d.dealId||'').toLowerCase().includes(q)); }
+  if(EXCLUDED_DEAL_IDS.size>0) deals=deals.filter(d=>!EXCLUDED_DEAL_IDS.has(d.id));
   return deals;
 }
 
@@ -3322,155 +3329,221 @@ function buildTimeTab(deals){
 // RECOVERY RATES TAB
 // ============================================================
 function buildRecoveryTab(){
+  // ── 1. Get data ───────────────────────────────────────────
   const deals = getRecoveryDeals();
-  const ent = activeEntity();
-  const dataSrc = deals.length && deals[0]._srcType==='sl' ? 'Syndication Report' : 'Closing / Funded Report';
+  const ent   = activeEntity();
+  const kpiEl = document.getElementById('recKpiRow');
+  const tblEl = document.getElementById('recTable');
+  const defEl = document.getElementById('recDefaultTable');
+  if(!kpiEl) return;
 
-  // ─── Aggregate by funded month ───────────────────────────────────────────
-  // Reference formula (FS Summary rows 169/175/177/182/214):
-  //   Upfront TPC    = Funded + Commission − Merchant Bank Fee
-  //   Total Collected = Cash Collections + Non-Cash Collections
-  //   Recovery Rate  = Total Collected / Upfront TPC
-  const byPeriod = {};
-  deals.forEach(d => {
-    const p = d.fundedDate ? d.fundedDate.slice(0,7) : (d._period||'unknown');
-    if(!byPeriod[p]) byPeriod[p] = {
-      period:p, funded:0, commission:0, bankFee:0,
-      cashColl:0, nonCashColl:0, totalColl:0,
-      rtr:0, defaultAmt:0, deals:0
-    };
-    const r = byPeriod[p];
-    r.funded      += d.amount;
-    r.commission  += (d.commission||0);
-    r.bankFee     += (d.merchantBankFee||0);
-    r.cashColl    += d.collected;
-    r.nonCashColl += (d.nonCashColl||0);
-    r.totalColl    = r.cashColl + r.nonCashColl;
-    r.rtr         += d.rtr;
-    r.deals++;
-    if(isDefault(d.status)) r.defaultAmt += d.amount;
-  });
+  const hasSl = deals.length && deals.some(d=>d._srcType==='sl');
+  const dataSrc = hasSl ? 'Syndication Report' : 'Closing / Funded Report';
 
-  // Upfront TPC = Funded + Commission − Merchant Bank Fee (ref row 179)
-  // Recovery Rate = Total Collected / Upfront TPC (ref row 214)
-  let hist = Object.values(byPeriod).sort((a,b)=>a.period>b.period?1:-1).filter(r=>r.funded>0);
-  hist.forEach(r => {
-    r.upfrontTPC = r.funded + r.commission - r.bankFee;
-    r.rate = r.upfrontTPC > 0 ? r.totalColl / r.upfrontTPC : 0;
-  });
-
-  // Merge manually-added snapshots for periods not covered by deal data
-  const manualHist = (ent.recoveryHistory||[]);
-  manualHist.forEach(h => {
-    if(!byPeriod[h.period]){
-      const tpc = (h.funded||0) + (h.commission||0) - (h.bankFee||0);
-      hist.push({
-        period:h.period, funded:h.funded||h.rtr||0,
-        totalColl:h.collected||0, rtr:h.rtr||0,
-        defaultAmt:h.defaultAmt||0, deals:0,
-        upfrontTPC:tpc||h.rtr||0,
-        rate:h.rate
-      });
-    }
-  });
-  hist.sort((a,b)=>a.period>b.period?1:-1);
-
-  if(!hist.length) {
-    document.getElementById('recKpiRow').innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload a Syndication Report, Closing Report, or Advance Funded Report to see recovery rate analytics</div>';
+  // Empty state — always update so stale placeholder is cleared
+  if(!deals.length){
+    kpiEl.innerHTML=`<div style="padding:32px;text-align:center;width:100%;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:8px">📈</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">No data for current filters</div>
+      <div style="font-size:12px">Upload a Closing Report, Advance Funded Report, or Syndication Report,<br>or adjust the sidebar filters to see recovery rate analytics.</div>
+    </div>`;
+    if(tblEl) tblEl.innerHTML='';
+    if(defEl) defEl.innerHTML='';
+    destroyChart('recChart');
     return;
   }
 
-  // Overall (all-period) rate
-  const totFunded   = hist.reduce((a,h)=>a+h.funded,0);
-  const totComm     = deals.reduce((a,d)=>a+(d.commission||0),0);
-  const totBankFee  = deals.reduce((a,d)=>a+(d.merchantBankFee||0),0);
-  const totCash     = deals.reduce((a,d)=>a+d.collected,0);
-  const totNonCash  = deals.reduce((a,d)=>a+(d.nonCashColl||0),0);
-  const totCollected= totCash + totNonCash;
-  const totTPC      = totFunded + totComm - totBankFee;
-  const overallRate = totTPC > 0 ? totCollected / totTPC : 0;
+  // ── 2. Aggregate by period (respects groupBy: monthly / quarterly / yearly) ──
+  const grp = STATE.groupBy || 'month';  // 'month' | 'quarter' | 'year'
+  const byPeriod = {};
+  deals.forEach(d => {
+    const key = periodKey(d.fundedDate, grp);
+    if(!byPeriod[key]) byPeriod[key] = {
+      key, label: periodLabel(d.fundedDate, grp),
+      funded:0, commission:0, bankFee:0,
+      cashColl:0, nonCashColl:0, totalColl:0,
+      rtr:0, remaining:0, defaultAmt:0, deals:0
+    };
+    const r = byPeriod[key];
+    r.funded      += (d.amount     || 0);
+    r.commission  += (d.commission || 0);
+    r.bankFee     += (d.merchantBankFee || 0);
+    r.cashColl    += (d.collected  || 0);
+    r.nonCashColl += (d.nonCashColl|| 0);
+    r.rtr         += (d.rtr        || 0);
+    r.remaining   += (d.remaining  || 0);
+    r.deals++;
+    if(isDefault(d.status)) r.defaultAmt += (d.amount||0);
+  });
 
-  // Latest period & MoM (ref rows 214, 215)
+  // ── 3. Compute Recovery Rate per period ───────────────────
+  // Reference FS Summary:
+  //   Upfront TPC (row 179) = Funded + Commission − Merchant Bank Fee
+  //   Total Collected (row 182) = Cash Coll + Non-Cash Coll
+  //   Recovery Rate (row 214) = Total Collected / Upfront TPC
+  let hist = Object.values(byPeriod)
+    .sort((a,b) => a.key > b.key ? 1 : -1)
+    .filter(r => r.funded > 0 || r.deals > 0);
+
+  hist.forEach(r => {
+    r.totalColl  = r.cashColl + r.nonCashColl;
+    r.upfrontTPC = r.funded + r.commission - r.bankFee;
+    r.rate = r.upfrontTPC > 0 ? r.totalColl / r.upfrontTPC : (r.funded > 0 ? r.totalColl / r.funded : 0);
+  });
+
+  // Merge manual snapshots for periods not covered by deal data
+  (ent.recoveryHistory||[]).forEach(h => {
+    if(!byPeriod[h.period]){
+      const tpc = (h.funded||0) + (h.commission||0) - (h.bankFee||0);
+      hist.push({
+        key: h.period, label: h.period,
+        funded: h.funded||h.rtr||0, commission:0, bankFee:0,
+        cashColl: h.collected||0, nonCashColl:0,
+        totalColl: h.collected||0,
+        rtr: h.rtr||0, remaining:0, defaultAmt: h.defaultAmt||0, deals:0,
+        upfrontTPC: tpc || h.rtr||0,
+        rate: h.rate||0
+      });
+    }
+  });
+  hist.sort((a,b) => a.key > b.key ? 1 : -1);
+
+  // ── 4. Overall totals ─────────────────────────────────────
+  const totFunded    = hist.reduce((s,h)=>s+h.funded,0);
+  const totComm      = hist.reduce((s,h)=>s+h.commission,0);
+  const totBankFee   = hist.reduce((s,h)=>s+h.bankFee,0);
+  const totCash      = hist.reduce((s,h)=>s+h.cashColl,0);
+  const totNonCash   = hist.reduce((s,h)=>s+h.nonCashColl,0);
+  const totCollected = totCash + totNonCash;
+  const totTPC       = totFunded + totComm - totBankFee;
+  const overallRate  = totTPC > 0 ? totCollected / totTPC : (totFunded > 0 ? totCollected / totFunded : 0);
+
+  // ── 5. Latest period & MoM (ref rows 214, 215) ───────────
   const last = hist[hist.length-1];
-  const prev = hist.length>1 ? hist[hist.length-2] : null;
-  // MoM Change (pts): current rate − previous rate (absolute)
+  const prev = hist.length > 1 ? hist[hist.length-2] : null;
   const momDelta = prev ? last.rate - prev.rate : 0;
-  // MoM % Change: (current − previous) / previous  (ref row 215 formula)
-  const momPct = prev && prev.rate ? momDelta / prev.rate : 0;
+  const momPct   = prev && prev.rate ? momDelta / prev.rate : 0;
+  const grpLabel = grp==='quarter' ? 'QoQ' : grp==='year' ? 'YoY' : 'MoM';
 
-  document.getElementById('recKpiRow').innerHTML=
-    `<div style="width:100%;padding:4px 0 8px;font-size:11px;color:var(--muted)">Data source: <b style="color:var(--fg)">${dataSrc}</b> · ${deals.length} deals · Formula: (Cash + Non-Cash Coll) ÷ (Funded + Comm − Bank Fee)</div>`+
-    [{label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%',
-      sub:'All periods combined · Upfront TPC: '+fmtFull$(totTPC),c:'var(--green)'},
-     {label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%',
-      sub:last.period+' · TPC: '+fmtFull$(last.upfrontTPC||0),c:'var(--blue)'},
-     {label:'MoM Change (pts)', val:(momDelta>=0?'+':'')+((momDelta)*100).toFixed(2)+'pp',
-      sub:prev?prev.period+' → '+last.period:'No previous period',c:momDelta>=0?'var(--green)':'var(--red)'},
-     {label:'MoM % Change', val:(momPct>=0?'+':'')+fmtPct(Math.abs(momPct)),
-      sub:'(Current − Prev) ÷ Prev · ref row 215',c:momPct>=0?'var(--green)':'var(--red)'},
-    ].map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
+  // ── 6. KPI cards ──────────────────────────────────────────
+  kpiEl.innerHTML =
+    `<div style="grid-column:1/-1;padding:2px 0 6px;font-size:11px;color:var(--muted)">` +
+    `Data source: <b style="color:var(--fg)">${dataSrc}</b> · ` +
+    `${deals.length} deals · ${hist.length} period${hist.length!==1?'s':''} · ` +
+    `View: <b style="color:var(--fg)">${grp==='quarter'?'Quarterly':grp==='year'?'Annual':'Monthly'}</b> · ` +
+    `Formula: (Cash+NonCash Coll) ÷ (Funded+Comm−BankFee)</div>` +
+    [
+      {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%',
+       sub:'Total Coll '+fmtFull$(totCollected)+' ÷ TPC '+fmtFull$(totTPC), c:'var(--green)'},
+      {label:`Latest Period (${last.label})`, val:(last.rate*100).toFixed(2)+'%',
+       sub:'TPC '+fmtFull$(last.upfrontTPC)+' · Coll '+fmtFull$(last.totalColl), c:'var(--blue)'},
+      {label:grpLabel+' Change (pts)', val:(momDelta>=0?'+':'')+((momDelta)*100).toFixed(2)+'pp',
+       sub: prev ? prev.label+' → '+last.label : 'No previous period',
+       c: momDelta>=0?'var(--green)':'var(--red)'},
+      {label:grpLabel+' % Change', val:(momPct>=0?'+':'')+((momPct*100).toFixed(2))+'%',
+       sub:'(Current−Prev)÷Prev · ref row 215',
+       c: momPct>=0?'var(--green)':'var(--red)'},
+    ].map(k=>`<div class="rec-card">
+      <div class="rec-label">${k.label}</div>
+      <div class="rec-val" style="color:${k.c}">${k.val}</div>
+      <div class="rec-sub">${k.sub}</div>
+    </div>`).join('');
+
+  // ── 7. Chart ──────────────────────────────────────────────
+  const chartLabels  = hist.map(h=>h.label);
+  const chartRates   = hist.map(h=>parseFloat((h.rate*100).toFixed(4)));
+  const chartCollect = hist.map(h=>parseFloat((h.totalColl/1000).toFixed(1)));
 
   makeChart('recChart','line',{
-    labels:hist.map(h=>h.period),
-    datasets:[{
-      label:'Recovery Rate %',data:hist.map(h=>+(h.rate*100).toFixed(4)),
-      borderColor:'#3fb950',backgroundColor:'rgba(63,185,80,.15)',fill:true,tension:.3,pointRadius:4,
-    }]
-  },{yFmt:v=>v.toFixed(2)+'%'});
+    labels: chartLabels,
+    datasets:[
+      {label:'Recovery Rate %', data:chartRates,
+       borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.12)',
+       fill:true, tension:.35, pointRadius:4, yAxisID:'yRate'},
+      {label:'Total Collections ($K)', data:chartCollect,
+       borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.08)',
+       fill:false, tension:.35, pointRadius:3, borderDash:[4,3], yAxisID:'yColl'},
+    ]
+  },{
+    extra:{
+      scales:{
+        yRate:{position:'left',  ticks:{color:'#8b949e',font:{size:10},callback:v=>v.toFixed(1)+'%'}, grid:{color:'rgba(48,54,61,.6)'}},
+        yColl:{position:'right', ticks:{color:'#8b949e',font:{size:10},callback:v=>'$'+v+'K'},       grid:{display:false}},
+        x:    {ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,.6)'}},
+      }
+    }
+  });
 
-  // ─── MoM table (ref rows 214, 215) ───────────────────────────────────────
-  // Sorted newest-first for the table
-  const tblRows=[...hist].reverse();
-  const tbl=document.getElementById('recTable');
-  tbl.innerHTML=`<thead><tr>
-    <th>Funded Month</th>
-    <th>Recovery Rate</th>
-    <th>Prev Rate</th>
-    <th>MoM Change (pts)</th>
-    <th>MoM % Change</th>
-    <th>Upfront TPC</th>
-    <th>Cash Coll</th>
-    <th>Non-Cash Coll</th>
-    <th>Total Coll</th>
-    <th>Deals</th>
-    <th>Default Amt</th>
-  </tr></thead><tbody>${tblRows.map((h,i)=>{
-    const prevH = tblRows[i+1];
-    // MoM change in rate points (absolute)
-    const d  = prevH != null ? h.rate - prevH.rate : null;
-    // MoM % change: (current − previous) / previous  (ref row 215)
-    const dp = (prevH && prevH.rate) ? d / prevH.rate : null;
-    return `<tr>
-      <td><b>${h.period}</b></td>
-      <td><b style="color:var(--green)">${(h.rate*100).toFixed(4)}%</b></td>
-      <td>${prevH != null ? (prevH.rate*100).toFixed(4)+'%' : '—'}</td>
-      <td class="${d===null?'neu':d>=0?'up':'down'}">${d===null?'—':(d>=0?'+':'')+((d)*100).toFixed(4)+'%'}</td>
-      <td class="${dp===null?'neu':dp>=0?'up':'down'}">${dp===null?'—':(dp>=0?'+':'')+fmtPct(Math.abs(dp))}</td>
-      <td>${fmtFull$(h.upfrontTPC||0)}</td>
-      <td>${fmtFull$(h.cashColl||h.totalColl||0)}</td>
-      <td>${fmtFull$(h.nonCashColl||0)}</td>
-      <td>${fmtFull$(h.totalColl||0)}</td>
-      <td>${h.deals||'—'}</td>
-      <td class="${h.defaultAmt>0?'down':''}">${h.defaultAmt?fmtFull$(h.defaultAmt):'—'}</td>
-    </tr>`;
-  }).join('')}</tbody>`;
+  // ── 8. MoM/QoQ table (ref rows 214, 215) ─────────────────
+  const tblRows = [...hist].reverse(); // newest first
+  if(tblEl) tblEl.innerHTML =
+    `<thead><tr>
+      <th>Period</th>
+      <th>Recovery Rate</th>
+      <th>Prev Rate</th>
+      <th>${grpLabel} Chg (pts)</th>
+      <th>${grpLabel} % Chg</th>
+      <th>Upfront TPC</th>
+      <th>Cash Coll</th>
+      <th>Non-Cash Coll</th>
+      <th>Total Coll</th>
+      <th>Funded</th>
+      <th>Comm</th>
+      <th>Bank Fee</th>
+      <th>Deals</th>
+      <th>Default Amt</th>
+    </tr></thead><tbody>${tblRows.map((h,i)=>{
+      const prevH = tblRows[i+1];
+      const chgPt = prevH != null ? h.rate - prevH.rate : null;
+      const chgPct= prevH && prevH.rate ? chgPt / prevH.rate : null;
+      return `<tr>
+        <td><b>${h.label}</b></td>
+        <td><b style="color:${h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)'}">${(h.rate*100).toFixed(2)}%</b></td>
+        <td>${prevH != null ? (prevH.rate*100).toFixed(2)+'%' : '—'}</td>
+        <td class="${chgPt===null?'neu':chgPt>=0?'up':'down'}">${chgPt===null?'—':(chgPt>=0?'+':'')+((chgPt)*100).toFixed(2)+'pp'}</td>
+        <td class="${chgPct===null?'neu':chgPct>=0?'up':'down'}">${chgPct===null?'—':(chgPct>=0?'+':'')+((chgPct*100).toFixed(2))+'%'}</td>
+        <td>${fmtFull$(h.upfrontTPC||0)}</td>
+        <td>${fmtFull$(h.cashColl||0)}</td>
+        <td>${fmtFull$(h.nonCashColl||0)}</td>
+        <td><b>${fmtFull$(h.totalColl||0)}</b></td>
+        <td>${fmtFull$(h.funded||0)}</td>
+        <td>${fmtFull$(h.commission||0)}</td>
+        <td>${fmtFull$(h.bankFee||0)}</td>
+        <td>${h.deals||'—'}</td>
+        <td class="${h.defaultAmt>0?'down':''}">${h.defaultAmt>0?fmtFull$(h.defaultAmt):'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
 
-  // Status breakdown
-  if(deals.length){
-    const statusData={};
+  // ── 9. Default & Collection breakdown by status ───────────
+  if(defEl && deals.length){
+    const statusMap={};
     deals.forEach(d=>{
       const s=d.status||'Unknown';
-      if(!statusData[s]) statusData[s]={status:s,deals:0,funded:0};
-      statusData[s].deals++; statusData[s].funded+=d.amount;
+      if(!statusMap[s]) statusMap[s]={status:s,deals:0,funded:0,collected:0,nonCash:0,remaining:0};
+      statusMap[s].deals++;
+      statusMap[s].funded    +=(d.amount||0);
+      statusMap[s].collected +=(d.collected||0);
+      statusMap[s].nonCash   +=(d.nonCashColl||0);
+      statusMap[s].remaining +=(d.remaining||0);
     });
-    const totalF=deals.reduce((a,d)=>a+d.amount,0);
-    const sRows=Object.values(statusData).sort((a,b)=>b.funded-a.funded);
-    document.getElementById('recDefaultTable').innerHTML=`<thead><tr>
-      <th>Status</th><th>Deals</th><th>% of Deals</th><th>Funded</th><th>% of Portfolio</th>
+    const totalF=deals.reduce((a,d)=>a+(d.amount||0),0);
+    const totalC=deals.reduce((a,d)=>a+(d.collected||0)+(d.nonCashColl||0),0);
+    const sRows=Object.values(statusMap).sort((a,b)=>b.funded-a.funded);
+    defEl.innerHTML=`<thead><tr>
+      <th>Status</th><th>Deals</th><th>% Deals</th>
+      <th>Funded</th><th>% Portfolio</th>
+      <th>Cash Coll</th><th>Non-Cash Coll</th><th>Total Coll</th>
+      <th>Remaining</th>
     </tr></thead><tbody>${sRows.map(r=>`<tr>
       <td><span class="badge ${isPerforming(r.status)?'badge-green':isDefault(r.status)?'badge-red':isSlowPay(r.status)?'badge-orange':'badge-yellow'}">${r.status}</span></td>
-      <td>${r.deals}</td><td>${fmtPct(r.deals/deals.length)}</td>
-      <td>${fmtFull$(r.funded)}</td><td>${fmtPct(r.funded/totalF)}</td>
+      <td>${r.deals}</td>
+      <td>${fmtPct(r.deals/deals.length)}</td>
+      <td>${fmtFull$(r.funded)}</td>
+      <td>${fmtPct(totalF?r.funded/totalF:0)}</td>
+      <td>${fmtFull$(r.collected)}</td>
+      <td>${fmtFull$(r.nonCash)}</td>
+      <td>${fmtFull$(r.collected+r.nonCash)}</td>
+      <td>${fmtFull$(r.remaining)}</td>
     </tr>`).join('')}</tbody>`;
   }
 }
@@ -3903,9 +3976,8 @@ function switchTab(t){
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
-  if(t==='histperf'){
-    buildHistPerfTable(getFilteredDeals());
-  }
+  if(t==='histperf') buildHistPerfTable(getFilteredDeals());
+  if(t==='recovery') buildRecoveryTab();
 }
 
 // ============================================================
