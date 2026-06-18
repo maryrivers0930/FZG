@@ -3183,8 +3183,8 @@ function toggleCoverOutliers(){
 }
 
 function renderOutlierBucket(idx){
-  const bucketEl = document.getElementById('coverOutlierBtns');
-  const listEl = document.getElementById('coverOutlierList');
+  const bucketEl = document.getElementById('outlierBucketBtns');
+  const listEl = document.getElementById('outlierDealList');
   if(!bucketEl || !listEl) return;
   const buckets = OUTLIER_BUCKET_STATS||[];
   const b = buckets[idx];
