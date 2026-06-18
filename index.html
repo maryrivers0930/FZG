@@ -408,12 +408,33 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       
     </div>
 
+    <!-- Deal Volume toggle chart — top of dashboard -->
+    <div id="outlierChartSection" class="section" style="margin-bottom:12px;padding:12px">
+      <div class="section-hdr" style="margin-bottom:10px;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="section-title" style="font-size:12px" id="dealVolChartTitle">Deal Funded Volume by Factor Rate Bucket</span>
+          <span class="section-sub" id="outlierChartSub" style="font-size:11px"></span>
+        </div>
+        <div style="display:flex;gap:0;margin-left:auto;border:1px solid rgba(139,148,158,0.3);border-radius:6px;overflow:hidden">
+          <button id="volToggleFactor" onclick="setDealVolView('factor')" style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(139,92,246,0.8);color:#fff;font-weight:600;transition:background 0.15s">Factor Rate Bucket</button>
+          <button id="volToggleSize"   onclick="setDealVolView('size')"   style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(30,35,50,0.6);color:#8b949e;font-weight:500;transition:background 0.15s">Funding Amount</button>
+        </div>
+      </div>
+      <div id="dealSizeDistChart" style="width:100%"></div>
+      <div id="outlierControls" style="margin-top:10px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button id="outlierListToggleBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleOutlierList()">Show Outlier Details</button>
+          <div id="outlierBucketBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+        </div>
+        <div id="outlierDealList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
+      </div>
+    </div>
+
     <!-- Outlier Toggle -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <button id="outlierToggleBtn" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="EXCLUDE_OUTLIERS=!EXCLUDE_OUTLIERS;buildAllViews()">Outliers: Included</button>
       <span style="font-size:11px;color:var(--muted)">Toggle to exclude statistical outliers (3×IQR) from recovery rate</span>
     </div>
-
 
     <!-- Primary KPIs - large -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="coverKpi1"><div class="kpi-card" style="border-top:3px solid var(--purple);padding:16px">
@@ -522,34 +543,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="chart-box">
         <div class="chart-title">Deal Status &amp; Default Exposure</div>
         <div class="chart-wrap"><canvas id="covStatusChart"></canvas></div>
-      </div>
-    </div>
-
-    <!-- Outlier Toggle -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-      <button id="outlierToggleBtn" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="EXCLUDE_OUTLIERS=!EXCLUDE_OUTLIERS;buildAllViews()">Outliers: Included</button>
-      <span style="font-size:11px;color:var(--muted)">Toggle to exclude statistical outliers (3×IQR) from recovery rate</span>
-    </div>
-
-    <!-- Deal Volume toggle chart (interactive, with outlier details) -->
-    <div id="outlierChartSection" class="section" style="margin-bottom:12px;padding:12px">
-      <div class="section-hdr" style="margin-bottom:10px;flex-wrap:wrap;gap:6px">
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <span class="section-title" style="font-size:12px" id="dealVolChartTitle">Deal Funded Volume by Factor Rate Bucket</span>
-          <span class="section-sub" id="outlierChartSub" style="font-size:11px"></span>
-        </div>
-        <div style="display:flex;gap:0;margin-left:auto;border:1px solid rgba(139,148,158,0.3);border-radius:6px;overflow:hidden">
-          <button id="volToggleFactor" onclick="setDealVolView('factor')" style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(139,92,246,0.8);color:#fff;font-weight:600;transition:background 0.15s">Factor Rate Bucket</button>
-          <button id="volToggleSize"   onclick="setDealVolView('size')"   style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(30,35,50,0.6);color:#8b949e;font-weight:500;transition:background 0.15s">Funding Amount</button>
-        </div>
-      </div>
-      <div id="dealSizeDistChart" style="width:100%"></div>
-      <div id="outlierControls" style="display:none;margin-top:10px">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <button id="outlierListToggleBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleOutlierList()">Show Outlier Details</button>
-          <div id="outlierBucketBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
-        </div>
-        <div id="outlierDealList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
 
@@ -2757,21 +2750,34 @@ function buildCover(deals){
     const subEl=document.getElementById('outlierChartSub');
     if(titleEl) titleEl.textContent = DEAL_VOL_VIEW==='size' ? 'Deal Funded Volume by Funding Amount' : 'Deal Funded Volume by Factor Rate Bucket';
 
+    const ctrlEl=document.getElementById('outlierControls');
+    const btn=document.getElementById('outlierListToggleBtn');
+    const listEl=document.getElementById('outlierDealList');
+    // Reset open state on each rebuild
+    if(btn){ btn.dataset.open='0'; btn.textContent='Show Outlier Details'; }
+    if(listEl) listEl.innerHTML='';
+    const bktBtnsEl=document.getElementById('outlierBucketBtns');
+    if(bktBtnsEl) bktBtnsEl.innerHTML='';
+
     if(DEAL_VOL_VIEW==='size'){
-      // Size buckets with outlier detection
+      // Global IQR outlier detection across ALL deals by funding amount
       const ORDER = ['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K–$1M','$1M+'];
       const sizeMap = {};
       ORDER.forEach(l=>{ sizeMap[l]={label:l,count:0,totalFunded:0,totalColl:0,deals:[]}; });
       deals.forEach(d=>{ const b=sizeBucket(d.amount); if(sizeMap[b]){ sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; sizeMap[b].totalColl+=d.collected; sizeMap[b].deals.push(d); } });
+      // Global IQR on all deal amounts to find truly large outliers
+      const allAmts = deals.map(d=>d.amount).sort((a,b)=>a-b);
+      const gQ1=allAmts[Math.floor(allAmts.length*0.25)]||0, gQ3=allAmts[Math.floor(allAmts.length*0.75)]||0;
+      const globalThresh = gQ3 + (gQ3-gQ1)*1.5;
+      const globalOutlierSet = new Set(deals.filter(d=>d.amount>globalThresh).map(d=>d.id));
+      // Build per-bucket stats, tagging global outliers
       const sizeBkts = ORDER.map(l=>{ const bkt=sizeMap[l];
-        const amts=bkt.deals.map(d=>d.amount).sort((a,b)=>a-b);
-        const q1=amts[Math.floor(amts.length*0.25)]||0, q3=amts[Math.floor(amts.length*0.75)]||0;
-        const med=amts[Math.floor(amts.length/2)]||0;
-        const outliers=bkt.deals.filter(d=>d.amount>q3+(q3-q1)*1.5 && amts.length>=3);
+        const outliers = bkt.deals.filter(d=>globalOutlierSet.has(d.id));
+        const med = bkt.deals.length ? [...bkt.deals].sort((a,b)=>a.amount-b.amount)[Math.floor(bkt.deals.length/2)].amount : 0;
         return {...bkt, outliers, median:med};
       });
       const allSzOut = sizeBkts.flatMap(b=>b.outliers);
-      if(subEl) subEl.textContent = allSzOut.length>0 ? allSzOut.length+' outlier'+(allSzOut.length>1?'s':'')+' detected across '+sizeBkts.filter(b=>b.outliers.length>0).length+' buckets' : 'No outliers detected';
+      if(subEl) subEl.textContent = allSzOut.length>0 ? allSzOut.length+' outlier'+(allSzOut.length>1?'s':'')+' detected (amount > '+fmtK(globalThresh)+')' : 'No outliers detected';
       const maxF2=Math.max(...sizeBkts.map(b=>b.totalFunded),1);
       const sRows=sizeBkts.map(b=>{
         const hasOut=b.outliers.length>0;
@@ -2797,18 +2803,13 @@ function buildCover(deals){
           +'<span style="color:#58a6ff">&#9632; Normal</span>'
           +(allSzOut.length>0?'<span style="color:#f85149">&#9632; Has outlier(s)</span>':'')
           +'<span style="margin-left:auto">'+deals.length+' deals</span></div>';
-      const ctrlEl=document.getElementById('outlierControls');
-      const btn=document.getElementById('outlierListToggleBtn');
-      const listEl=document.getElementById('outlierDealList');
-      if(btn){ btn.dataset.open='0'; btn.textContent='Show Outlier Details'; }
-      if(listEl) listEl.innerHTML='';
       SIZE_OUTLIER_BUCKET_STATS = sizeBkts.filter(b=>b.outliers.length>0);
       OUTLIER_BUCKET_STATS = SIZE_OUTLIER_BUCKET_STATS;
-      if(ctrlEl) ctrlEl.style.display = SIZE_OUTLIER_BUCKET_STATS.length ? '' : 'none';
+      if(ctrlEl) ctrlEl.style.display = ''; // always visible
     } else {
       // Factor rate buckets
       const allOut=bucketStats.flatMap(b=>b.outliers);
-      if(subEl) subEl.textContent = allOut.length>0 ? allOut.length+' outlier'+(allOut.length>1?'s':'')+' detected across '+bucketStats.filter(b=>b.outliers.length>0).length+' buckets' : 'No outliers detected';
+      if(subEl) subEl.textContent = allOut.length>0 ? allOut.length+' outlier'+(allOut.length>1?'s':'')+' detected across '+bucketStats.filter(b=>b.outliers.length>0).length+' factor buckets' : 'No outliers detected';
       const maxFunded=Math.max(...bucketStats.map(b=>b.totalFunded),1);
       const rows=bucketStats.map(b=>{
         const hasOut=b.outliers.length>0;
@@ -2834,15 +2835,10 @@ function buildCover(deals){
           +'</div>'+rows
           +'<div style="margin-top:5px;font-size:10px;color:#8b949e;display:flex;gap:14px">'
             +'<span style="color:#a78bfa">&#9632; Normal bucket</span>'
-            +(bucketStats.flatMap(b=>b.outliers).length>0?'<span style="color:#f85149">&#9632; Contains outlier(s)</span>':'')
+            +(allOut.length>0?'<span style="color:#f85149">&#9632; Contains outlier(s)</span>':'')
             +'<span style="margin-left:auto">'+deals.length+' deals</span></div>';
-      const ctrlEl=document.getElementById('outlierControls');
-      const btn=document.getElementById('outlierListToggleBtn');
-      const listEl=document.getElementById('outlierDealList');
-      if(btn){ btn.dataset.open='0'; btn.textContent='Show Outlier Details'; }
-      if(listEl) listEl.innerHTML='';
       OUTLIER_BUCKET_STATS = bucketStats.filter(b=>b.outliers.length>0);
-      if(ctrlEl) ctrlEl.style.display = OUTLIER_BUCKET_STATS.length ? '' : 'none';
+      if(ctrlEl) ctrlEl.style.display = ''; // always visible
     }
   })();
 
