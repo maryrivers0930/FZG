@@ -556,18 +556,20 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     </div>
 
     <!-- ISO/Brokers + simple volume tables -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
       <div class="section" style="margin:0">
         <div class="section-hdr"><span class="section-title">Top ISO / Brokers</span></div>
         <div class="tbl-wrap"><table class="data-tbl" id="coverIsoTable"></table></div>
       </div>
-      <div class="section" style="margin:0">
-        <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span></div>
-        <div id="coverFundingAmtBars"></div>
-      </div>
-      <div class="section" style="margin:0">
-        <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span></div>
-        <div id="coverFactorBars"></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="section" style="margin:0">
+          <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span></div>
+          <div id="coverFundingAmtBars"></div>
+        </div>
+        <div class="section" style="margin:0">
+          <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span></div>
+          <div id="coverFactorBars"></div>
+        </div>
       </div>
     </div>
 
@@ -2683,60 +2685,69 @@ function buildCover(deals){
     if(!el) return;
     const ORDER = ['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K–$1M','$1M+'];
     const sizeMap = {};
-    ORDER.forEach(l=>{ sizeMap[l]={label:l,count:0,totalFunded:0,totalColl:0}; });
-    deals.forEach(d=>{ const b=sizeBucket(d.amount); if(sizeMap[b]){ sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; sizeMap[b].totalColl+=d.collected; } });
-    const maxF = Math.max(...ORDER.map(l=>sizeMap[l].totalFunded),1);
+    ORDER.forEach(l=>{ sizeMap[l]={label:l,count:0,totalFunded:0}; });
+    deals.forEach(d=>{ const b=sizeBucket(d.amount); if(sizeMap[b]){ sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; } });
+    const totalDeals = deals.length || 1;
+    const totalFunded = deals.reduce((a,d)=>a+d.amount,0) || 1;
+    const thStyle='font-size:10px;color:#8b949e;text-transform:uppercase;padding:3px 6px;text-align:right;border-bottom:1px solid rgba(139,148,158,0.2)';
+    const th0='font-size:10px;color:#8b949e;text-transform:uppercase;padding:3px 6px;text-align:left;border-bottom:1px solid rgba(139,148,158,0.2)';
     const rows = ORDER.map(l=>{ const b=sizeMap[l];
-      const barPct=(b.totalFunded/maxF*100).toFixed(1);
-      const recRate=b.totalFunded>0?(b.totalColl/b.totalFunded*100).toFixed(0)+'%':'—';
-      const recColor=recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
-      return '<div style="display:grid;grid-template-columns:80px 1fr 44px 90px 70px;gap:3px 6px;align-items:center;padding:2px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
-        +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
-        +'<div style="position:relative;height:12px;background:rgba(88,166,255,0.1);border-radius:2px;overflow:hidden">'
-          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:rgba(88,166,255,0.75);border-radius:2px"></div>'
-        +'</div>'
-        +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
-        +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
-        +'<span style="font-size:11px;color:'+recColor+';text-align:right">'+recRate+'</span>'
-        +'</div>';
+      const pctDeals = (b.count/totalDeals*100).toFixed(1)+'%';
+      const pctFunded = (b.totalFunded/totalFunded*100).toFixed(1)+'%';
+      return '<tr>'
+        +'<td style="font-size:11px;color:#c9d1d9;padding:3px 6px;white-space:nowrap">'+b.label+'</td>'
+        +'<td style="font-size:11px;color:#e6edf3;font-weight:600;padding:3px 6px;text-align:right">'+b.count+'</td>'
+        +'<td style="font-size:11px;color:#8b949e;padding:3px 6px;text-align:right">'+pctDeals+'</td>'
+        +'<td style="font-size:11px;color:#c084fc;padding:3px 6px;text-align:right">'+fmtK(b.totalFunded)+'</td>'
+        +'<td style="font-size:11px;color:#8b949e;padding:3px 6px;text-align:right">'+pctFunded+'</td>'
+        +'</tr>';
     }).join('');
-    el.innerHTML='<div style="display:grid;grid-template-columns:80px 1fr 44px 90px 70px;gap:3px 6px;padding:0 0 3px;border-bottom:1px solid rgba(139,148,158,0.15);margin-bottom:2px">'
-      +'<span style="font-size:10px;color:#8b949e;text-align:right;padding-right:6px;text-transform:uppercase">Size</span>'
-      +'<span style="font-size:10px;color:#8b949e;text-transform:uppercase">Volume</span>'
-      +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Deals</span>'
-      +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
-      +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recov.</span>'
-    +'</div>'+rows+'<div style="margin-top:3px;font-size:10px;color:#8b949e;text-align:right">'+deals.length+' deals</div>';
+    el.innerHTML='<div class="tbl-wrap"><table class="data-tbl" style="width:100%">'
+      +'<thead><tr>'
+        +'<th style="'+th0+'">DEAL SIZE</th>'
+        +'<th style="'+thStyle+'">DEALS</th>'
+        +'<th style="'+thStyle+'">% DEALS</th>'
+        +'<th style="'+thStyle+'">FUNDED</th>'
+        +'<th style="'+thStyle+'">% FUNDED</th>'
+      +'</tr></thead>'
+      +'<tbody>'+rows+'</tbody>'
+      +'</table></div>';
   })();
 
   // ── Simple summary table: Factor Rate Bucket (beside ISO/Brokers) ──
   (()=>{
     const el = document.getElementById('coverFactorBars');
     if(!el) return;
-    const maxFunded = Math.max(...bucketStats.map(b=>b.totalFunded), 1);
-    const rows = bucketStats.map(b=>{
-      const barPct = (b.totalFunded/maxFunded*100).toFixed(1);
-      const recRate = b.totalFunded>0 ? (b.deals.reduce((a,d)=>a+d.collected,0)/b.totalFunded*100).toFixed(0)+'%' : '—';
-      const recColor = recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
-      return '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:3px 6px;align-items:center;padding:2px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
-        +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
-        +'<div style="position:relative;height:12px;background:rgba(139,92,246,0.1);border-radius:2px;overflow:hidden">'
-          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:rgba(139,92,246,0.75);border-radius:2px"></div>'
-        +'</div>'
-        +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
-        +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
-        +'<span style="font-size:11px;color:'+recColor+';text-align:right">'+recRate+'</span>'
-        +'</div>';
+    if(!bucketStats.length){
+      el.innerHTML='<div style="color:#8b949e;font-size:12px;padding:6px 0">No deals with factor rates in range.</div>';
+      return;
+    }
+    const totalDeals = bucketStats.reduce((a,b)=>a+b.count,0) || 1;
+    const totalFunded = bucketStats.reduce((a,b)=>a+b.totalFunded,0) || 1;
+    const thStyle='font-size:10px;color:#8b949e;text-transform:uppercase;padding:3px 6px;text-align:right;border-bottom:1px solid rgba(139,148,158,0.2)';
+    const th0='font-size:10px;color:#8b949e;text-transform:uppercase;padding:3px 6px;text-align:left;border-bottom:1px solid rgba(139,148,158,0.2)';
+    const rows = FACTOR_BUCKETS.map(fb=>{
+      const b = bucketStats.find(s=>s.label===fb.label) || {label:fb.label,count:0,totalFunded:0};
+      const pctDeals = (b.count/totalDeals*100).toFixed(1)+'%';
+      const pctFunded = (b.totalFunded/totalFunded*100).toFixed(1)+'%';
+      return '<tr>'
+        +'<td style="font-size:11px;color:#c9d1d9;padding:3px 6px;white-space:nowrap">'+b.label+'</td>'
+        +'<td style="font-size:11px;color:#e6edf3;font-weight:600;padding:3px 6px;text-align:right">'+b.count+'</td>'
+        +'<td style="font-size:11px;color:#8b949e;padding:3px 6px;text-align:right">'+pctDeals+'</td>'
+        +'<td style="font-size:11px;color:#c084fc;padding:3px 6px;text-align:right">'+fmtK(b.totalFunded)+'</td>'
+        +'<td style="font-size:11px;color:#8b949e;padding:3px 6px;text-align:right">'+pctFunded+'</td>'
+        +'</tr>';
     }).join('');
-    el.innerHTML = !bucketStats.length
-      ? '<div style="color:#8b949e;font-size:12px;padding:6px 0">No deals with factor rates in range.</div>'
-      : '<div style="display:grid;grid-template-columns:72px 1fr 44px 90px 70px;gap:3px 6px;padding:0 0 3px;border-bottom:1px solid rgba(139,148,158,0.15);margin-bottom:2px">'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;padding-right:6px;text-transform:uppercase">Factor</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-transform:uppercase">Volume</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Deals</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
-          +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recov.</span>'
-        +'</div>'+rows+'<div style="margin-top:3px;font-size:10px;color:#8b949e;text-align:right">'+deals.length+' deals</div>';
+    el.innerHTML='<div class="tbl-wrap"><table class="data-tbl" style="width:100%">'
+      +'<thead><tr>'
+        +'<th style="'+th0+'">DEAL SIZE</th>'
+        +'<th style="'+thStyle+'">DEALS</th>'
+        +'<th style="'+thStyle+'">% DEALS</th>'
+        +'<th style="'+thStyle+'">FUNDED</th>'
+        +'<th style="'+thStyle+'">% FUNDED</th>'
+      +'</tr></thead>'
+      +'<tbody>'+rows+'</tbody>'
+      +'</table></div>';
   })();
 
   // ── Toggle chart section: Factor Rate Bucket OR Funding Amount (with outlier details) ──
