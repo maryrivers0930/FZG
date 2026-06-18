@@ -1809,8 +1809,13 @@ function parseSyndList(rows, ent, period){
                                 colFind(r,'syndicatedamount','syndicated amount') || 0);
     const syndRTR    = parseNum(r['RTR Amt (Syn)'] || colFind(r,'rtramtsyn') ||
                                 colFind(r,'rtramount','rtr amount') || 0);
-    const syndColl   = parseNum(r['Amount Collected (Syn)'] || colFind(r,'amountcollectedsyn') ||
+    // Reference FS Summary $AL: Syndicator Cash Collections
+    const syndColl   = parseNum(r['Syndicator Cash Collections'] || r['Amount Collected (Syn)'] ||
+                                colFind(r,'amountcollectedsyn') ||
                                 colFind(r,'amountcollected','amount collected') || 0);
+    // Reference FS Summary $AM: Syndicator Non-Cash Collections
+    const nonCashColl= parseNum(r['Syndicator Non Cash Collections'] || r['Non Cash Collections'] ||
+                                colFind(r,'noncashcollections','non cash collections') || 0);
     const syndCollQual = parseNum(r['Amount Collected (Syn Qual)'] || 0);
     const syndPayout = parseNum(r['Amount Paid Out (Syn Net)'] || colFind(r,'amountpaidoutsynnet') ||
                                 colFind(r,'netpayment','net payment') || 0);
@@ -1823,7 +1828,12 @@ function parseSyndList(rows, ent, period){
                                 colFind(r,'rtrbalance','rtr balance') || 0);
     const rtrBalance = parseNum(r['RTR Balance'] || colFind(r,'rtrbalance','rtr balance') || 0);
     const pctPart    = parseNum(r['% Participation'] || colFind(r,'participation','pctparticipation') || 0);
-    const commAmt    = parseNum(r['Comm. Amt (Syn)'] || colFind(r,'commamtsyn') || 0);
+    // Reference FS Summary $AO: Syndicator Commission
+    const commAmt    = parseNum(r['Syndicator Commission'] || r['Comm. Amt (Syn)'] ||
+                                colFind(r,'commamtsyn') || 0);
+    // Reference FS Summary $AP: Syndicator Bank Fee
+    const syndicatorBankFee = parseNum(r['Syndicator Bank Fee'] || r['Bank Fee'] ||
+                                       colFind(r,'syndicatorbankfee','bankfee','bank fee') || 0);
     const totalCommAmt = parseNum(r['Total Commission Amount'] || 0);
     const totalSyndCommAmt = parseNum(r['Total Synd. Commission Amount'] || 0);
     const discountsApplied = parseNum(r['Discounts Applied'] || 0);
@@ -1860,6 +1870,9 @@ function parseSyndList(rows, ent, period){
       term: 0,
       rtr,
       collected: syndColl,
+      nonCashColl,
+      commission: commAmt,
+      merchantBankFee: syndicatorBankFee,
       remaining: remaining || Math.max(0, rtr-syndColl),
       syndicator,
       iso: String(colFind(r,'iso','broker') || '').trim() || 'Direct',
@@ -2018,6 +2031,28 @@ function clearExclusions(){
 function updateExcludedCount(){
   const el=document.getElementById('excludedCount');
   if(el) el.textContent=EXCLUDED_DEAL_IDS.size;
+}
+
+// Returns filtered deals for the Recovery Tab. Uses sl (Syndication) data if available,
+// otherwise falls back to ls/af data. Applies the same sidebar filters.
+function getRecoveryDeals(){
+  const ent = activeEntity(); if(!ent) return [];
+  const dbp = ent.dealsByPeriod||{};
+  const selectedPeriods = MS_STATE.period&&MS_STATE.period.length ? MS_STATE.period : Object.keys(dbp);
+  let allPeriodDeals = selectedPeriods.flatMap(p=>dbp[p]||[]);
+  // Prefer sl data when present (reference methodology uses Syndication Report columns)
+  const slDeals = allPeriodDeals.filter(d => d._srcType === 'sl' && d.merchant && d.fundedDate);
+  const lsAfDeals = allPeriodDeals.filter(d => (d._srcType === 'ls' || d._srcType === 'af') && d.merchant && d.fundedDate);
+  let deals = slDeals.length > 0 ? slDeals : lsAfDeals;
+  // Apply sidebar filters
+  const f = STATE.filters;
+  if(f.dateFrom) deals = deals.filter(d=>d.fundedDate>=f.dateFrom);
+  if(f.dateTo) deals = deals.filter(d=>d.fundedDate<=f.dateTo);
+  if(MS_STATE.syndicator&&MS_STATE.syndicator.length) deals = deals.filter(d=>MS_STATE.syndicator.includes(d.syndicator));
+  if(MS_STATE.iso&&MS_STATE.iso.length) deals = deals.filter(d=>MS_STATE.iso.includes(d.iso));
+  if(MS_STATE.status&&MS_STATE.status.length) deals = deals.filter(d=>MS_STATE.status.includes(d.status));
+  if(EXCLUDED_DEAL_IDS.size>0) deals = deals.filter(d=>!EXCLUDED_DEAL_IDS.has(d.id));
+  return deals;
 }
 
 function getFilteredDeals(){
@@ -3287,8 +3322,9 @@ function buildTimeTab(deals){
 // RECOVERY RATES TAB
 // ============================================================
 function buildRecoveryTab(){
-  const deals = getFilteredDeals();
+  const deals = getRecoveryDeals();
   const ent = activeEntity();
+  const dataSrc = deals.length && deals[0]._srcType==='sl' ? 'Syndication Report' : 'Closing / Funded Report';
 
   // ─── Aggregate by funded month ───────────────────────────────────────────
   // Reference formula (FS Summary rows 169/175/177/182/214):
@@ -3340,7 +3376,7 @@ function buildRecoveryTab(){
   hist.sort((a,b)=>a.period>b.period?1:-1);
 
   if(!hist.length) {
-    document.getElementById('recKpiRow').innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload Closing Report or Advance Funded Report data to see recovery rate analytics</div>';
+    document.getElementById('recKpiRow').innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload a Syndication Report, Closing Report, or Advance Funded Report to see recovery rate analytics</div>';
     return;
   }
 
@@ -3362,16 +3398,17 @@ function buildRecoveryTab(){
   // MoM % Change: (current − previous) / previous  (ref row 215 formula)
   const momPct = prev && prev.rate ? momDelta / prev.rate : 0;
 
-  document.getElementById('recKpiRow').innerHTML=[
-    {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%',
-     sub:'(Cash + Non-Cash Coll) ÷ (Funded + Comm − Bank Fee)',c:'var(--green)'},
-    {label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%',
-     sub:last.period+' · Upfront TPC: '+fmtFull$(last.upfrontTPC||0),c:'var(--blue)'},
-    {label:'MoM Change (pts)', val:(momDelta>=0?'+':'')+((momDelta)*100).toFixed(2)+'%',
-     sub:prev?prev.period+' → '+last.period:'No previous period',c:momDelta>=0?'var(--green)':'var(--red)'},
-    {label:'MoM % Change', val:(momPct>=0?'+':'')+fmtPct(Math.abs(momPct)),
-     sub:'(Current − Prev) ÷ Prev (ref row 215)',c:momPct>=0?'var(--green)':'var(--red)'},
-  ].map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
+  document.getElementById('recKpiRow').innerHTML=
+    `<div style="width:100%;padding:4px 0 8px;font-size:11px;color:var(--muted)">Data source: <b style="color:var(--fg)">${dataSrc}</b> · ${deals.length} deals · Formula: (Cash + Non-Cash Coll) ÷ (Funded + Comm − Bank Fee)</div>`+
+    [{label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%',
+      sub:'All periods combined · Upfront TPC: '+fmtFull$(totTPC),c:'var(--green)'},
+     {label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%',
+      sub:last.period+' · TPC: '+fmtFull$(last.upfrontTPC||0),c:'var(--blue)'},
+     {label:'MoM Change (pts)', val:(momDelta>=0?'+':'')+((momDelta)*100).toFixed(2)+'pp',
+      sub:prev?prev.period+' → '+last.period:'No previous period',c:momDelta>=0?'var(--green)':'var(--red)'},
+     {label:'MoM % Change', val:(momPct>=0?'+':'')+fmtPct(Math.abs(momPct)),
+      sub:'(Current − Prev) ÷ Prev · ref row 215',c:momPct>=0?'var(--green)':'var(--red)'},
+    ].map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
 
   makeChart('recChart','line',{
     labels:hist.map(h=>h.period),
