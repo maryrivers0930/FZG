@@ -515,13 +515,43 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
     </div>
     <div class="chart-row">
-      <div class="chart-box">
-        <div class="chart-title">Recovery Rate % by Period</div>
-        <div class="chart-wrap"><canvas id="covFeesChart" style="box-sizing: border-box; display: block; height: 220px; width: 615px;" width="615" height="220"></canvas></div>
-      </div>
-      <div class="chart-box">
+      <div class="chart-box" style="grid-column:1/-1">
         <div class="chart-title">Deal Status &amp; Default Exposure</div>
         <div class="chart-wrap"><canvas id="covStatusChart" style="box-sizing: border-box; display: block; height: 220px; width: 615px;" width="615" height="220"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Deal Funded Volume — two sections side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
+      <!-- Funding Amount -->
+      <div class="section" style="margin:0">
+        <div class="section-hdr">
+          <span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span>
+          <span id="coverSizeFactorSub" class="section-sub" style="font-size:10px;margin-left:8px"></span>
+        </div>
+        <div id="coverFundingAmtBars"></div>
+        <div id="coverSizeOutlierControls" style="display:none;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <button id="coverSizeOutlierBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleCoverSizeOutliers()">Show Outlier Details</button>
+            <div id="coverSizeOutlierBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+          </div>
+          <div id="coverSizeOutlierList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <!-- Factor Rate Bucket -->
+      <div class="section" style="margin:0">
+        <div class="section-hdr">
+          <span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span>
+          <span id="coverFactorSub" class="section-sub" style="font-size:10px;margin-left:8px"></span>
+        </div>
+        <div id="coverFactorBars"></div>
+        <div id="coverOutlierControls" style="display:none;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <button id="coverOutlierBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleCoverOutliers()">Show Outlier Details</button>
+            <div id="coverOutlierBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+          </div>
+          <div id="coverOutlierList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
+        </div>
       </div>
     </div>
 
@@ -534,33 +564,11 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="tbl-wrap"><table class="data-tbl" id="coverSyndTable"></table></div>
     </div>
 
-    <!-- ISO + Volume breakdown -->
+    <!-- ISO/Brokers standalone -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
       <div class="section" style="margin:0">
         <div class="section-hdr"><span class="section-title">Top ISO / Brokers</span></div>
         <div class="tbl-wrap"><table class="data-tbl" id="coverIsoTable"></table></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <!-- Funding Amount -->
-        <div class="section" style="margin:0">
-          <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span></div>
-          <div id="coverFundingAmtBars"></div>
-        </div>
-        <!-- Factor Rate Bucket -->
-        <div class="section" style="margin:0">
-          <div class="section-hdr">
-            <span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span>
-            <span id="coverFactorSub" class="section-sub" style="font-size:10px;margin-left:8px"></span>
-          </div>
-          <div id="coverFactorBars"></div>
-          <div id="coverOutlierControls" style="display:none;margin-top:8px">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <button id="coverOutlierBtn" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="toggleCoverOutliers()">Show Outlier Details</button>
-              <div id="coverOutlierBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
-            </div>
-            <div id="coverOutlierList" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1942,8 +1950,8 @@ let MS_STATE = {syndicator:[], iso:[], wl:[], dtype:[], status:[], period:[], en
 // DEAL EXCLUSION SYSTEM
 // ============================================================
 let EXCLUDED_DEAL_IDS = new Set();
-let OUTLIER_BUCKET_STATS = []; // current outlier buckets for detail panel
-let DEAL_VOL_VIEW = 'factor'; // 'factor' | 'size'
+let OUTLIER_BUCKET_STATS = []; // factor-bucket outliers for detail panel
+let SIZE_OUTLIER_BUCKET_STATS = []; // size-bucket outliers for detail panel
 
 let _exclusionAllDeals = []; // full sorted deal list — ALL deals, no cap
 
@@ -2669,27 +2677,46 @@ function buildCover(deals){
 
   const fmtK = v => v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v);
 
-  // ── Funding Amount section ──
+  // ── Funding Amount section (with outlier detection per bucket) ──
   (()=>{
     const el = document.getElementById('coverFundingAmtBars');
     if(!el) return;
-    const sizeMap = {};
     const ORDER = ['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K–$1M','$1M+'];
+    const sizeMap = {};
+    ORDER.forEach(l=>{ sizeMap[l]={label:l,count:0,totalFunded:0,totalColl:0,deals:[]}; });
     deals.forEach(d=>{
       const b = sizeBucket(d.amount);
-      if(!sizeMap[b]) sizeMap[b]={label:b,count:0,totalFunded:0,totalColl:0};
-      sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; sizeMap[b].totalColl+=d.collected;
+      if(sizeMap[b]){ sizeMap[b].count++; sizeMap[b].totalFunded+=d.amount; sizeMap[b].totalColl+=d.collected; sizeMap[b].deals.push(d); }
     });
-    const sBuckets = ORDER.map(l=>sizeMap[l]||{label:l,count:0,totalFunded:0,totalColl:0});
-    const maxF = Math.max(...sBuckets.map(b=>b.totalFunded),1);
-    const rows = sBuckets.map(b=>{
+    // Outlier detection per size bucket (Q3 + 1.5*IQR on funding amount within bucket)
+    const sizeOutlierIds = new Set();
+    const sizeBucketStats = ORDER.map(l=>{
+      const bkt = sizeMap[l];
+      const amts = bkt.deals.map(d=>d.amount).sort((a,b)=>a-b);
+      const q1=amts[Math.floor(amts.length*0.25)]||0;
+      const q3=amts[Math.floor(amts.length*0.75)]||0;
+      const thresh = q3 + (q3-q1)*1.5;
+      const med = amts[Math.floor(amts.length/2)]||0;
+      const outliers = bkt.deals.filter(d=>d.amount>thresh && amts.length>=3);
+      outliers.forEach(d=>sizeOutlierIds.add(d.id));
+      return {label:l, count:bkt.count, totalFunded:bkt.totalFunded, totalColl:bkt.totalColl, deals:bkt.deals, outliers, median:med};
+    });
+    const allSizeOutliers = sizeBucketStats.flatMap(b=>b.outliers);
+    const subEl2 = document.getElementById('coverSizeFactorSub');
+    if(subEl2) subEl2.textContent = allSizeOutliers.length>0
+      ? allSizeOutliers.length+' outlier'+(allSizeOutliers.length>1?'s':'')+' in '+sizeBucketStats.filter(b=>b.outliers.length>0).length+' bucket'+(sizeBucketStats.filter(b=>b.outliers.length>0).length>1?'s':'')
+      : '';
+    const maxF = Math.max(...sizeBucketStats.map(b=>b.totalFunded),1);
+    const rows = sizeBucketStats.map(b=>{
+      const hasOutlier = b.outliers.length>0;
       const barPct=(b.totalFunded/maxF*100).toFixed(1);
+      const barCol = hasOutlier ? 'rgba(248,81,73,0.75)' : 'rgba(88,166,255,0.75)';
       const recRate=b.totalFunded>0?(b.totalColl/b.totalFunded*100).toFixed(0)+'%':'—';
       const recColor=recRate==='—'?'#8b949e':parseFloat(recRate)>=80?'#3fb950':parseFloat(recRate)>=60?'#f0883e':'#f85149';
       return '<div style="display:grid;grid-template-columns:80px 1fr 44px 90px 70px;gap:4px 8px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(139,148,158,0.07)">'
         +'<span style="font-size:11px;color:#8b949e;text-align:right;padding-right:6px;white-space:nowrap">'+b.label+'</span>'
         +'<div style="position:relative;height:14px;background:rgba(88,166,255,0.1);border-radius:3px;overflow:hidden">'
-          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:rgba(88,166,255,0.75);border-radius:3px"></div>'
+          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+barPct+'%;background:'+barCol+';border-radius:3px"></div>'
         +'</div>'
         +'<span style="font-size:11px;color:#e6edf3;font-weight:600;text-align:right">'+b.count+'</span>'
         +'<span style="font-size:11px;color:#c084fc;text-align:right">'+fmtK(b.totalFunded)+'</span>'
@@ -2703,7 +2730,21 @@ function buildCover(deals){
         +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Funded</span>'
         +'<span style="font-size:10px;color:#8b949e;text-align:right;text-transform:uppercase">Recovery</span>'
       +'</div>'+rows
-      +'<div style="margin-top:4px;font-size:10px;color:#8b949e;text-align:right">'+deals.length+' deals</div>';
+      +'<div style="margin-top:4px;font-size:10px;color:#8b949e;display:flex;gap:10px">'
+        +'<span style="color:#58a6ff">&#9632; Normal</span>'
+        +(allSizeOutliers.length>0?'<span style="color:#f85149">&#9632; Has outlier(s)</span>':'')
+        +'<span style="margin-left:auto">'+deals.length+' deals</span>'
+      +'</div>';
+    // Outlier controls for size buckets
+    const ctrlEl = document.getElementById('coverSizeOutlierControls');
+    const sBtn = document.getElementById('coverSizeOutlierBtn');
+    const sListEl = document.getElementById('coverSizeOutlierList');
+    if(sBtn){ sBtn.dataset.open='0'; sBtn.textContent='Show Outlier Details'; }
+    if(sListEl) sListEl.innerHTML='';
+    if(ctrlEl){
+      SIZE_OUTLIER_BUCKET_STATS = sizeBucketStats.filter(b=>b.outliers.length>0);
+      ctrlEl.style.display = SIZE_OUTLIER_BUCKET_STATS.length ? '' : 'none';
+    }
   })();
 
   // ── Factor Rate Bucket section ──
@@ -2794,7 +2835,6 @@ function buildCover(deals){
 
   // Secondary KPIs (6-col when extra fields exist)
   const kpi2Items = [
-    {label:'Recovery Rate'+(EXCLUDE_OUTLIERS?' (ex. outliers)':''),val:(calcRecRate(totalColl,totalFunded,totalComm,totalBankFee)*100).toFixed(1)+'%',sub:EXCLUDE_OUTLIERS?'Adj: '+adjRecRate+'% — '+excDeals+' deal'+(excDeals!==1?'s':'')+' excluded':'(Cash+NonCash Coll) ÷ (Funded+Comm−BankFee)',c:'var(--green)'},
     {label:'Write-Off Balance',val:fmt$(totalWriteOff),sub:writeOffDeals.length+' deals · '+fmtPct(totalFunded?totalWriteOff/totalFunded:0)+' of funded',c:'var(--red)'},
     {label:'Principal Exposure',val:fmt$(totalPrincipalExp>0?totalPrincipalExp:defAmt),sub:totalPrincipalExp>0?'Net at-risk after write-offs':defDeals.length+' default deals · '+fmtPct(totalFunded?(totalPrincipalExp>0?totalPrincipalExp:defAmt)/totalFunded:0)+' of portfolio',c:'var(--orange)'},
     {label:'Avg / Median Deal',val:fmt$(deals.length?totalFunded/deals.length:0),sub:'Median: '+fmt$(medDealSize)+' · Factor: '+avgFactor.toFixed(3),c:'var(--purple)'},
@@ -2835,18 +2875,6 @@ function buildCover(deals){
       {label:'Collected',data:pKeys.map(p=>byP[p].collected),backgroundColor:'rgba(63,185,80,.65)',borderRadius:4},
     ]
   },{yFmt:v=>fmt$(v)});
-
-  const recByP=pKeys.map(p=>({
-    label:periodLabel(p,STATE.groupBy),
-    rate:calcRecRate(byP[p].collected,byP[p].funded,byP[p].commission,byP[p].bankFee||0)*100
-  }));
-  makeChart('covFeesChart','line',{
-    labels:recByP.map(r=>r.label),
-    datasets:[{
-      label:'Recovery Rate %',data:recByP.map(r=>r.rate),
-      borderColor:'#3fb950',backgroundColor:'rgba(63,185,80,.15)',fill:true,tension:.3,pointRadius:4
-    }]
-  },{yFmt:v=>v.toFixed(1)+'%'});
 
   const statusAmt={};
   deals.forEach(d=>{ const s=d.status||'Unknown'; statusAmt[s]=(statusAmt[s]||0)+d.amount; });
@@ -2986,6 +3014,68 @@ function buildCoverMoM(deals, periods){
 // ============================================================
 // PORTFOLIO TAB — company metrics, syndicator as filter panel
 // ============================================================
+function toggleCoverSizeOutliers(){
+  const btn = document.getElementById('coverSizeOutlierBtn');
+  const bucketEl = document.getElementById('coverSizeOutlierBtns');
+  const listEl = document.getElementById('coverSizeOutlierList');
+  if(!btn || !bucketEl) return;
+  const isOpen = btn.dataset.open==='1';
+  if(isOpen){
+    btn.dataset.open='0';
+    btn.textContent='Show Outlier Details';
+    bucketEl.innerHTML='';
+    if(listEl) listEl.innerHTML='';
+  } else {
+    btn.dataset.open='1';
+    btn.textContent='Hide Outlier Details';
+    const buckets = SIZE_OUTLIER_BUCKET_STATS||[];
+    bucketEl.innerHTML = buckets.map((b,i)=>
+      '<button class="hbtn" style="font-size:11px;border-color:rgba(248,81,73,0.5)" '
+      +'onclick="renderSizeOutlierBucket('+i+')" id="sobtn_'+i+'">'+b.label+' ('+b.outliers.length+')</button>'
+    ).join('');
+    if(buckets.length) setTimeout(()=>renderSizeOutlierBucket(0), 0);
+  }
+}
+
+function renderSizeOutlierBucket(idx){
+  const bucketEl = document.getElementById('coverSizeOutlierBtns');
+  const listEl = document.getElementById('coverSizeOutlierList');
+  if(!bucketEl || !listEl) return;
+  const buckets = SIZE_OUTLIER_BUCKET_STATS||[];
+  const b = buckets[idx];
+  if(!b) return;
+  buckets.forEach((_,i)=>{
+    const btn = document.getElementById('sobtn_'+i);
+    if(btn) btn.classList.toggle('active', i===idx);
+  });
+  const fmtK = v => v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v);
+  const sorted = [...b.outliers].sort((a,c)=>c.amount-a.amount);
+  listEl.innerHTML = '<div style="margin-top:6px;padding:10px;background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.2);border-radius:6px">'
+    +'<div style="font-size:11px;color:#e3b341;font-weight:600;margin-bottom:8px">'
+      +b.label+' — '+sorted.length+' outlier'+(sorted.length>1?'s':'')+' · bucket median: '+fmtK(b.median)
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="border-bottom:1px solid rgba(139,148,158,0.2)">'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Deal ID</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Entity Name</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Whitelabel</th>'
+    +'<th style="text-align:left;padding:3px 8px;color:#8b949e;font-weight:500">Funded Date</th>'
+    +'<th style="text-align:right;padding:3px 8px;color:#8b949e;font-weight:500">Funding Amt</th>'
+    +'<th style="text-align:right;padding:3px 8px;color:#8b949e;font-weight:500">RTR</th>'
+    +'</tr></thead><tbody>'
+    +sorted.map(d=>'<tr style="border-bottom:1px solid rgba(139,148,158,0.07)">'
+      +'<td style="padding:3px 8px;color:#f85149;font-weight:600">'+(d.dealId||d.id||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#e6edf3">'+(d.merchant||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#8b949e">'+(d.whiteLabel||'—')+'</td>'
+      +'<td style="padding:3px 8px;color:#8b949e">'+(d.fundedDate||'—')+'</td>'
+      +'<td style="padding:3px 8px;text-align:right;color:#c084fc">'+fmtK(d.amount)+'</td>'
+      +'<td style="padding:3px 8px;text-align:right;color:#58a6ff">'+fmtK(d.rtr)+'</td>'
+      +'</tr>'
+    ).join('')
+    +'</tbody></table></div></div>';
+}
+
 function toggleCoverOutliers(){
   const btn = document.getElementById('coverOutlierBtn');
   const bucketEl = document.getElementById('coverOutlierBtns');
