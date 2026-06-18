@@ -416,12 +416,14 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 
     <!-- Deal Volume Chart (Factor Rate Bucket / Funding Amount toggle) -->
     <div id="outlierChartSection" class="section" style="margin-bottom:12px;padding:12px">
-      <div class="section-hdr" style="margin-bottom:10px">
-        <span class="section-title" style="font-size:12px" id="dealVolChartTitle">Deal Funded Volume by Factor Rate Bucket</span>
-        <span class="section-sub" id="outlierChartSub"></span>
-        <div style="display:flex;gap:4px;margin-left:auto">
-          <button id="volToggleFactor" class="btn btn-ghost btn-sm active" style="font-size:11px" onclick="setDealVolView('factor')">Factor Rate Bucket</button>
-          <button id="volToggleSize"   class="btn btn-ghost btn-sm"        style="font-size:11px" onclick="setDealVolView('size')">Funding Amount</button>
+      <div class="section-hdr" style="margin-bottom:10px;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="section-title" style="font-size:12px" id="dealVolChartTitle">Deal Funded Volume by Factor Rate Bucket</span>
+          <span class="section-sub" id="outlierChartSub" style="font-size:11px"></span>
+        </div>
+        <div style="display:flex;gap:0;margin-left:auto;border:1px solid rgba(139,148,158,0.3);border-radius:6px;overflow:hidden">
+          <button id="volToggleFactor" onclick="setDealVolView('factor')" style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(139,92,246,0.8);color:#fff;font-weight:600;transition:background 0.15s">Factor Rate Bucket</button>
+          <button id="volToggleSize"   onclick="setDealVolView('size')"   style="font-size:11px;padding:5px 12px;border:none;cursor:pointer;background:rgba(30,35,50,0.6);color:#8b949e;font-weight:500;transition:background 0.15s">Funding Amount</button>
         </div>
       </div>
       <div id="dealSizeDistChart" style="width:100%"></div>
@@ -2668,10 +2670,10 @@ function buildCover(deals){
   const renewedExcess=renewedDeals.reduce((a,d)=>a+(d.collected-d.rtr),0);
   const pureCollected=deals.reduce((a,d)=>a+Math.min(d.collected,d.rtr),0);
 
-  // Sync toggle button active state
+  // Sync toggle button active state with inline styles (no CSS class dependency)
   const vbF=document.getElementById('volToggleFactor'), vbS=document.getElementById('volToggleSize');
-  if(vbF) vbF.classList.toggle('active', DEAL_VOL_VIEW==='factor');
-  if(vbS) vbS.classList.toggle('active', DEAL_VOL_VIEW==='size');
+  if(vbF){ vbF.style.background=DEAL_VOL_VIEW==='factor'?'rgba(139,92,246,0.8)':'rgba(30,35,50,0.6)'; vbF.style.color=DEAL_VOL_VIEW==='factor'?'#fff':'#8b949e'; }
+  if(vbS){ vbS.style.background=DEAL_VOL_VIEW==='size'?'rgba(88,166,255,0.8)':'rgba(30,35,50,0.6)'; vbS.style.color=DEAL_VOL_VIEW==='size'?'#fff':'#8b949e'; }
 
   // Factor Rate Bucket Chart + Outlier List
   (()=>{
@@ -2680,19 +2682,19 @@ function buildCover(deals){
     if(!el) return;
     const subEl = document.getElementById('outlierChartSub');
 
-    // Count all outliers across buckets
     const allOutlierDeals = bucketStats.flatMap(b=>b.outliers);
-    if(subEl) subEl.textContent = allOutlierDeals.length>0
-      ? allOutlierDeals.length+' outlier'+(allOutlierDeals.length>1?'s':'')+' detected across '+bucketStats.filter(b=>b.outliers.length>0).length+' factor bucket'+(bucketStats.filter(b=>b.outliers.length>0).length>1?'s':'')
-      : 'No outliers detected';
-
     const fmtK = v => v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v);
 
-    // Update chart title to match active view
+    // Update chart title and subtitle to match active view
     const titleEl = document.getElementById('dealVolChartTitle');
     if(titleEl) titleEl.textContent = DEAL_VOL_VIEW==='size'
       ? 'Deal Funded Volume by Funding Amount'
       : 'Deal Funded Volume by Factor Rate Bucket';
+    if(subEl) subEl.textContent = DEAL_VOL_VIEW==='size'
+      ? deals.length+' deals across 7 funding amount buckets'
+      : (allOutlierDeals.length>0
+          ? allOutlierDeals.length+' outlier'+(allOutlierDeals.length>1?'s':'')+' detected across '+bucketStats.filter(b=>b.outliers.length>0).length+' factor bucket'+(bucketStats.filter(b=>b.outliers.length>0).length>1?'s':'')
+          : 'No outliers detected');
 
     if(DEAL_VOL_VIEW==='size'){
       // ── Funding Amount view ──
@@ -3017,8 +3019,6 @@ function buildCoverMoM(deals, periods){
 // ============================================================
 function setDealVolView(v){
   DEAL_VOL_VIEW = v;
-  document.getElementById('volToggleFactor').classList.toggle('active', v==='factor');
-  document.getElementById('volToggleSize').classList.toggle('active', v==='size');
   buildAllViews();
 }
 
