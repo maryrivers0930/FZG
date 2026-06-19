@@ -2963,14 +2963,6 @@ function buildCover(deals){
   document.getElementById('coverIsoTable').innerHTML=`<thead><tr><th>ISO / Broker</th><th>Deals</th><th>Funded</th><th>% of Total</th><th>Collected</th></tr></thead>
   <tbody>${isoRows.map(r=>`<tr><td><a href="#" onclick="event.preventDefault();drillToPerf('iso','${r.iso.replace(/'/g,"\\'")}')" style="color:var(--purple);text-decoration:none">${r.iso}</a></td><td>${r.deals}</td><td>${fmtFull$(r.funded)}</td><td>${fmtPct(totalFunded?r.funded/totalFunded:0)}</td><td>${fmtFull$(r.collected)}</td></tr>`).join('')}</tbody>`;
 
-  // Size table
-  const sizeData={};
-  deals.forEach(d=>{ const b=sizeBucket(d.amount); if(!sizeData[b]) sizeData[b]={bucket:b,deals:0,funded:0}; sizeData[b].deals++; sizeData[b].funded+=d.amount; });
-  const sOrder=['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K+'];
-  const sizeRows=Object.values(sizeData).sort((a,b)=>sOrder.indexOf(a.bucket)-sOrder.indexOf(b.bucket));
-  document.getElementById('coverSizeTable').innerHTML=`<thead><tr><th>Deal Size</th><th>Deals</th><th>% Deals</th><th>Funded</th><th>% Funded</th></tr></thead>
-  <tbody>${sizeRows.map(r=>`<tr><td>${r.bucket}</td><td>${r.deals}</td><td>${fmtPct(deals.length?r.deals/deals.length:0)}</td><td>${fmtFull$(r.funded)}</td><td>${fmtPct(totalFunded?r.funded/totalFunded:0)}</td></tr>`).join('')}</tbody>`;
-
   // Tier Breakdown table
   const tierOrder=['Under $500K','$500K–$1M','Over $1M'];
   const tierData={};
