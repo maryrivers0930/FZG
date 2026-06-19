@@ -694,6 +694,21 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
         <div class="chart-wrap"><canvas id="dimBar2Chart" style="box-sizing: border-box; display: block; height: 0px; width: 0px;" width="0" height="0"></canvas></div>
       </div>
     </div>
+    <!-- Collections by Payment Type — always visible on Dimensions tab -->
+    <div class="section" id="payTypeSection">
+      <div class="section-hdr">
+        <span class="section-title">Collections by Payment Type</span>
+        <span class="section-sub" id="payTypeSub"></span>
+      </div>
+      <div class="chart-row" style="margin-bottom:0">
+        <div class="chart-box" style="grid-column:1/-1">
+          <div class="chart-title">Collections by Payment Type</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="payTypeChart"></canvas></div>
+        </div>
+      </div>
+      <div class="tbl-wrap" style="margin-top:12px"><table class="data-tbl" id="payTypeTable"></table></div>
+    </div>
+
     <div class="section">
       <div class="section-hdr"><span class="section-title" id="dimTableTitle">ISO / Broker Analysis</span></div>
       <div class="tbl-wrap"><table class="data-tbl" id="dimTable"></table></div>
@@ -1567,6 +1582,12 @@ function parseLendSaas(rows, ent, period, srcType){
     const discounts = parseNum(colExact(r,'discounts') || 0);
     const writeOffsApplied = parseNum(colExact(r,'write offs applied') || colFind(r,'writeoffsapplied') || 0);
 
+    // Collections by Payment Type — Closing Report specific columns
+    const payAch         = parseNum(colExact(r,'split/ach') || 0);
+    const payWire        = parseNum(colExact(r,'direct payments') || 0);
+    const payMca         = parseNum(colExact(r,'payments from mca (renewals)') || 0);
+    const payCashOther   = parseNum(colExact(r,'cash - other') || colExact(r,'cash-other') || 0);
+
     // Beginning/Ending RTR for period-level analysis
     const beginningRTR = parseNum(colExact(r,'beginning rtr') || colFind(r,'beginningrtr') || rtr);
     const endingRTR = remaining;
@@ -1689,6 +1710,10 @@ function parseLendSaas(rows, ent, period, srcType){
       refunds,
       discounts,
       writeOffsApplied,
+      payAch,
+      payWire,
+      payMca,
+      payCashOther,
       beginningRTR,
       endingRTR,
       periodsRemaining,
@@ -3592,6 +3617,69 @@ function factorBucket(f){
   if(f<1.6) return '1.50–1.59';
   return '1.60+';
 }
+function buildPaymentTypeSection(deals){
+  // Aggregate the four payment type buckets across all filtered deals
+  const buckets = [
+    { label: 'ACH',              color: 'rgba(88,166,255,.75)',  key: 'payAch' },
+    { label: 'Wire Transfer',    color: 'rgba(167,139,250,.75)', key: 'payWire' },
+    { label: 'Payments from MCA',color: 'rgba(63,185,80,.75)',   key: 'payMca' },
+    { label: 'Other',            color: 'rgba(240,136,62,.75)',   key: null },  // settlements + payCashOther
+  ];
+  const totals = { payAch:0, payWire:0, payMca:0, other:0 };
+  let hasData = false;
+  deals.forEach(d=>{
+    totals.payAch  += (d.payAch   || 0);
+    totals.payWire += (d.payWire  || 0);
+    totals.payMca  += (d.payMca   || 0);
+    totals.other   += (d.settlements || 0) + (d.payCashOther || 0);
+    if(d.payAch || d.payWire || d.payMca || d.payCashOther) hasData = true;
+  });
+
+  const grand = totals.payAch + totals.payWire + totals.payMca + totals.other;
+  const sub = document.getElementById('payTypeSub');
+  if(sub) sub.textContent = hasData ? '' : 'Available from Closing Report data';
+
+  const vals = [totals.payAch, totals.payWire, totals.payMca, totals.other];
+
+  makeChart('payTypeChart','bar',{
+    labels: buckets.map(b=>b.label),
+    datasets:[{
+      label:'Collections',
+      data: vals,
+      backgroundColor: buckets.map(b=>b.color),
+      borderRadius: 4
+    }]
+  },{yFmt:v=>fmt$(v)});
+
+  const tbl = document.getElementById('payTypeTable');
+  if(!tbl) return;
+  tbl.innerHTML = `<thead><tr>
+    <th>Payment Type</th>
+    <th>Collections</th>
+    <th>% of Total Collections</th>
+    <th>Source Column(s)</th>
+  </tr></thead><tbody>${buckets.map((b,i)=>{
+    const v = vals[i];
+    const pct = grand > 0 ? v/grand : 0;
+    const src = b.label==='ACH'?'Split/ACH':
+                b.label==='Wire Transfer'?'Direct Payments':
+                b.label==='Payments from MCA'?'Payments From MCA (Renewals)':
+                'Settlements + Cash - Other';
+    return `<tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${b.color};margin-right:6px"></span>${b.label}</td>
+      <td>${fmtFull$(v)}</td>
+      <td>${grand?fmtPct(pct):'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${src}</td>
+    </tr>`;
+  }).join('')}
+  <tr class="total-row">
+    <td>TOTAL</td>
+    <td>${fmtFull$(grand)}</td>
+    <td>100%</td>
+    <td></td>
+  </tr></tbody>`;
+}
+
 function buildDimensionTab(deals){
   const dim=CURR_DIM;
   const getDimVal = d =>
@@ -3665,6 +3753,8 @@ function buildDimensionTab(deals){
     <td>${fmtFull$(deals.reduce((a,d)=>a+d.remaining,0))}</td>
     <td>${fmtPct(calcRecRate(deals.reduce((a,d)=>a+d.collected,0),totalFunded,deals.reduce((a,d)=>a+(d.commission||0),0),deals.reduce((a,d)=>a+(d.merchantBankFee||0),0)))}</td>
   </tr></tbody>`;
+
+  buildPaymentTypeSection(deals);
 }
 
 // ============================================================
