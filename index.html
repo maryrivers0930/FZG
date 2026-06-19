@@ -1042,6 +1042,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ent.dealsByPeriod['migrated'] = ent.deals;
     }
     delete ent.deals;
+    // Ensure recoveryHistory is always an array (old SNAP versions stored it as object)
+    if(!Array.isArray(ent.recoveryHistory)) ent.recoveryHistory = [];
   });
 
   // Seed FZG recovery history if empty
@@ -3579,7 +3581,7 @@ function buildRecoveryTab(){
   });
 
   // Merge manual snapshots for periods not covered by uploaded deal data
-  (ent.recoveryHistory||[]).forEach(h => {
+  (Array.isArray(ent.recoveryHistory)?ent.recoveryHistory:[]).forEach(h => {
     if(!byPeriod[h.period])
       hist.push({period:h.period, funded:h.rtr||0, collected:h.collected||0,
                  rtr:h.rtr||0, defaultAmt:h.defaultAmt||0, deals:0,
@@ -3595,7 +3597,7 @@ function buildRecoveryTab(){
         🔍 <b>Diagnostics</b><br>
         Deals from getAllDeals (all history): <b>${deals.length}</b><br>
         Periods in byPeriod: <b>${Object.keys(byPeriod).length}</b><br>
-        Manual snapshots: <b>${(ent.recoveryHistory||[]).length}</b><br>
+        Manual snapshots: <b>${(Array.isArray(ent.recoveryHistory)?ent.recoveryHistory:[]).length}</b><br>
         ${deals.length===0?'⚠️ No ls/af deals with merchant + fundedDate found.':'⚠️ All deals have funded amount = 0 or missing.'}
       </div>
     </div>`;
@@ -3849,7 +3851,7 @@ function exportExcel(){
   if(timeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timeRows), 'Time Analysis');
 
   // Sheet 4: Recovery History
-  const hist=(ent.recoveryHistory||[]).slice().sort((a,b)=>a.period>b.period?1:-1);
+  const hist=(Array.isArray(ent.recoveryHistory)?ent.recoveryHistory:[]).slice().sort((a,b)=>a.period>b.period?1:-1);
   if(hist.length){
     const recRows=hist.map((h,i)=>{
       const prev=hist[i-1];
