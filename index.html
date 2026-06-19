@@ -715,26 +715,28 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 
   <!-- ===== RECOVERY RATES TAB ===== -->
   <div id="tab-recovery" class="tab-content">
-    <div class="rec-grid" id="recKpiRow"><div class="empty"><div class="empty-icon">📈</div><p>Add recovery snapshots to track MoM changes</p></div></div>
+    <div class="rec-grid" id="recKpiRow">
+      <div class="empty"><div class="empty-icon">📈</div><p>Upload a Closing Report or Advanced Funded Report to see recovery rate metrics.</p></div>
+    </div>
     <div class="chart-row">
       <div class="chart-box">
-        <div class="chart-title">Recovery Rate % by Period</div>
+        <div class="chart-title">Recovery Rate % by Period <span style="font-size:10px;color:var(--muted);font-weight:400">(from uploaded deal data)</span></div>
         <div class="chart-wrap" style="height:240px"><canvas id="covFeesChart"></canvas></div>
       </div>
       <div class="chart-box">
-        <div class="chart-title">Recovery Rate History</div>
+        <div class="chart-title">Recovery Rate History <span style="font-size:10px;color:var(--muted);font-weight:400">(deal data + manual snapshots)</span></div>
         <div class="chart-wrap" style="height:240px"><canvas id="recChart"></canvas></div>
       </div>
     </div>
     <div class="section">
       <div class="section-hdr">
         <span class="section-title">Month-over-Month Recovery Rate</span>
-        <button class="btn btn-ghost btn-sm" onclick="openAddRecovery()">+ Add Snapshot</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAddRecovery()">+ Add Manual Snapshot</button>
       </div>
       <div class="tbl-wrap"><table class="data-tbl" id="recTable"></table></div>
     </div>
     <div class="section">
-      <div class="section-hdr"><span class="section-title">Default &amp; Collection Breakdown</span></div>
+      <div class="section-hdr"><span class="section-title">Default &amp; Collection Breakdown by Status</span></div>
       <div class="tbl-wrap"><table class="data-tbl" id="recDefaultTable"></table></div>
     </div>
   </div>
@@ -3539,140 +3541,164 @@ function buildTimeTab(deals){
 // ============================================================
 function buildRecoveryTab(){
   const deals = getFilteredDeals();
-  const ent = activeEntity();
+  const ent   = activeEntity();
   const kpiEl = document.getElementById('recKpiRow');
   const tblEl = document.getElementById('recTable');
   const defEl = document.getElementById('recDefaultTable');
   if(!kpiEl) return;
 
-  // Aggregate deal data by funded month (YYYY-MM key)
+  // Is the tab currently visible? Only render charts when visible to guarantee
+  // Chart.js gets a non-zero canvas size.
+  const tabVisible = document.getElementById('tab-recovery')?.classList.contains('active') ?? false;
+
+  // ── Aggregate deal data by funded month (YYYY-MM) ──────────────────────────
   const byPeriod = {};
   deals.forEach(d => {
-    const p = d.fundedDate ? d.fundedDate.slice(0,7) : (d._period||'unknown');
-    if(!byPeriod[p]) byPeriod[p] = {period:p, funded:0, collected:0, rtr:0, defaultAmt:0, deals:0, origination:0, commission:0};
+    const p = d.fundedDate ? d.fundedDate.slice(0,7) : (d._period || 'unknown');
+    if(!byPeriod[p]) byPeriod[p] = {period:p, funded:0, collected:0, rtr:0,
+                                      defaultAmt:0, deals:0, origination:0,
+                                      commission:0, bankFee:0};
     const r = byPeriod[p];
-    r.funded += d.amount; r.collected += d.collected; r.rtr += (d.rtr||0); r.deals++;
-    r.origination += (d.origination||0); r.commission += (d.commission||0);
+    r.funded    += d.amount;
+    r.collected += d.collected;
+    r.rtr       += (d.rtr||0);
+    r.deals++;
+    r.origination += (d.origination||0);
+    r.commission  += (d.commission||0);
+    r.bankFee     += (d.merchantBankFee||0);
     if(isDefault(d.status)) r.defaultAmt += d.amount;
   });
 
-  // Recovery Rate = Collected ÷ (Funded − Origination + Commission)
+  // Recovery Rate per period = Collected ÷ (Funded + Comm − BankFee)
+  // (same formula as calcRecRate used across the rest of the dashboard)
   let hist = Object.values(byPeriod).sort((a,b)=>a.period>b.period?1:-1).filter(r=>r.funded>0);
   hist.forEach(r => {
-    const denom = r.funded - (r.origination||0) + (r.commission||0);
-    r.rate = denom > 0 ? r.collected / denom : 0;
+    r.rate = calcRecRate(r.collected, r.funded, r.commission, r.bankFee);
   });
 
-  // Merge manual snapshots for periods not covered by deal data
+  // Merge manual snapshots for periods not covered by uploaded deal data
   (ent.recoveryHistory||[]).forEach(h => {
     if(!byPeriod[h.period])
-      hist.push({period:h.period, funded:h.rtr||0, collected:h.collected||0, rtr:h.rtr||0, defaultAmt:h.defaultAmt||0, deals:0, rate:h.rate||0});
+      hist.push({period:h.period, funded:h.rtr||0, collected:h.collected||0,
+                 rtr:h.rtr||0, defaultAmt:h.defaultAmt||0, deals:0,
+                 commission:0, bankFee:0, rate:h.rate||0, _snapshot:true});
   });
   hist.sort((a,b)=>a.period>b.period?1:-1);
 
+  // ── No data at all ──────────────────────────────────────────────────────────
   if(!hist.length){
-    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload Closing Report or Advance Funded Report data to see recovery rate analytics</div>';
+    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload a Closing Report or Advanced Funded Report to see recovery rate analytics.</div>';
     if(tblEl) tblEl.innerHTML='';
     if(defEl) defEl.innerHTML='';
-    destroyChart('recChart');
-    destroyChart('covFeesChart');
+    if(tabVisible){ destroyChart('recChart'); destroyChart('covFeesChart'); }
     return;
   }
 
-  const last = hist[hist.length-1];
-  const prev = hist.length>1 ? hist[hist.length-2] : null;
-  const delta = prev ? last.rate-prev.rate : 0;
-  const deltaPct = prev && prev.rate ? delta/prev.rate : 0;
-
-  // Overall rate across all filtered deals
+  // ── Portfolio-level totals (from uploaded deals only) ──────────────────────
   const totalFunded = deals.reduce((a,d)=>a+d.amount,0);
   const totalColl   = deals.reduce((a,d)=>a+d.collected,0);
-  const totalOrig   = deals.reduce((a,d)=>a+(d.origination||0),0);
   const totalComm   = deals.reduce((a,d)=>a+(d.commission||0),0);
-  const overallDenom = totalFunded - totalOrig + totalComm;
-  const overallRate  = overallDenom > 0 ? totalColl / overallDenom : 0;
+  const totalBankFee= deals.reduce((a,d)=>a+(d.merchantBankFee||0),0);
+  const portRate    = deals.length ? calcRecRate(totalColl,totalFunded,totalComm,totalBankFee) : null;
 
-  // KPI cards — only show portfolio rate when deal data exists
+  const last   = hist[hist.length-1];
+  const prev   = hist.length>1 ? hist[hist.length-2] : null;
+  const delta  = prev ? last.rate - prev.rate : 0;
+  const deltaPct = prev && prev.rate ? delta/prev.rate : 0;
+
+  // ── KPI cards ───────────────────────────────────────────────────────────────
   const kpiCards = [];
-  if(deals.length){
-    const portRate = calcRecRate(totalColl, totalFunded, totalComm, totalOrig);
-    kpiCards.push({label:'Recovery Rate (Portfolio)', val:(portRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded + Comm − Orig)', c:'var(--green)'});
-    kpiCards.push({label:'Overall Rate (All Periods)', val:(overallRate*100).toFixed(2)+'%', sub:'Across all filtered deals', c:'var(--green)'});
+  if(portRate !== null){
+    kpiCards.push({label:'Portfolio Recovery Rate', val:(portRate*100).toFixed(2)+'%',
+                   sub:'Collected ÷ (Funded + Comm − BankFee)', c:'var(--green)'});
   }
-  kpiCards.push({label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%', sub:last.period, c:'var(--blue)'});
-  kpiCards.push({label:'MoM Change', val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%', sub:'Rate point change', c:delta>=0?'var(--green)':'var(--red)'});
-  kpiCards.push({label:'% Change', val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)), sub:'MoM percent change', c:deltaPct>=0?'var(--green)':'var(--red)'});
-  kpiEl.innerHTML = kpiCards.map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
-
-  // Recovery Rate History chart (all periods including snapshots)
-  makeChart('recChart','line',{
-    labels:hist.map(h=>h.period),
-    datasets:[{
-      label:'Recovery Rate %', data:hist.map(h=>+(h.rate*100).toFixed(2)),
-      borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.15)', fill:true, tension:.3, pointRadius:4,
-    }]
-  },{yFmt:v=>v.toFixed(1)+'%'});
-
-  // Recovery Rate % by Period chart (deal data only, using calcRecRate formula)
+  kpiCards.push({label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%',
+                 sub:last.period, c:'var(--blue)'});
+  kpiCards.push({label:'MoM Change (pts)',
+                 val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%',
+                 sub:'vs prior period', c:delta>=0?'var(--green)':'var(--red)'});
+  kpiCards.push({label:'MoM % Change',
+                 val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)),
+                 sub:'rate-over-rate', c:deltaPct>=0?'var(--green)':'var(--red)'});
   if(deals.length){
-    const byPd={};
-    deals.forEach(d=>{
-      const k=periodKey(d.fundedDate,STATE.groupBy);
-      if(!byPd[k]) byPd[k]={funded:0,collected:0,commission:0,bankFee:0};
-      byPd[k].funded+=d.amount; byPd[k].collected+=d.collected;
-      byPd[k].commission+=(d.commission||0); byPd[k].bankFee+=(d.merchantBankFee||0);
-    });
-    const pdKeys=Object.keys(byPd).sort();
-    makeChart('covFeesChart','line',{
-      labels:pdKeys.map(p=>periodLabel(p,STATE.groupBy)),
+    kpiCards.push({label:'Periods Loaded', val:Object.keys(byPeriod).length,
+                   sub:deals.length+' deals', c:'var(--muted)'});
+  }
+  kpiEl.innerHTML = kpiCards.map(k=>
+    `<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`
+  ).join('');
+
+  // ── Charts — only render when tab is visible ────────────────────────────────
+  if(tabVisible){
+    // "Recovery Rate History" — all periods (deal data + snapshots)
+    makeChart('recChart','line',{
+      labels: hist.map(h=>h.period),
       datasets:[{
         label:'Recovery Rate %',
-        data:pdKeys.map(p=>+(calcRecRate(byPd[p].collected,byPd[p].funded,byPd[p].commission,byPd[p].bankFee||0)*100).toFixed(2)),
-        borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)', fill:true, tension:.3, pointRadius:4
+        data: hist.map(h=>+(h.rate*100).toFixed(2)),
+        borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.15)',
+        fill:true, tension:.3, pointRadius:4,
       }]
     },{yFmt:v=>v.toFixed(1)+'%'});
-  } else {
-    destroyChart('covFeesChart');
+
+    // "Recovery Rate % by Period" — deal data only (same calcRecRate formula)
+    if(deals.length && Object.keys(byPeriod).length){
+      const dealKeys = Object.keys(byPeriod).sort();
+      makeChart('covFeesChart','line',{
+        labels: dealKeys.map(p=>periodLabel(p, STATE.groupBy)),
+        datasets:[{
+          label:'Recovery Rate %',
+          data: dealKeys.map(p=>+(byPeriod[p].rate*100).toFixed(2)),
+          borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)',
+          fill:true, tension:.3, pointRadius:4
+        }]
+      },{yFmt:v=>v.toFixed(1)+'%'});
+    } else {
+      destroyChart('covFeesChart');
+    }
   }
 
-  // MoM table — newest first
-  const rows=[...hist].reverse();
+  // ── Month-over-Month table (newest first) ───────────────────────────────────
+  const rows = [...hist].reverse();
   if(tblEl) tblEl.innerHTML=`<thead><tr>
-    <th>Period</th><th>Recovery Rate</th><th>Previous Rate</th>
-    <th>Change (pts)</th><th>% Change</th><th>Funded</th><th>Collected</th><th>Default Amt</th>
+    <th>Period</th><th>Recovery Rate</th><th>Prev Rate</th>
+    <th>Chg (pts)</th><th>% Chg</th><th>Funded</th><th>Collected</th><th>Default Amt</th>
   </tr></thead><tbody>${rows.map((h,i)=>{
-    const prevH=rows[i+1];
-    const d=prevH?h.rate-prevH.rate:null;
-    const dp=prevH&&prevH.rate?d/prevH.rate:null;
+    const prevH = rows[i+1];
+    const d  = prevH ? h.rate - prevH.rate : null;
+    const dp = prevH && prevH.rate ? d/prevH.rate : null;
+    const rateColor = h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)';
     return `<tr>
-      <td><b>${h.period}</b></td>
-      <td><b style="color:${h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)'}">${(h.rate*100).toFixed(2)}%</b></td>
+      <td><b>${h.period}</b>${h._snapshot?'<span style="font-size:9px;color:var(--muted);margin-left:4px">snapshot</span>':''}</td>
+      <td><b style="color:${rateColor}">${(h.rate*100).toFixed(2)}%</b></td>
       <td>${prevH?(prevH.rate*100).toFixed(2)+'%':'—'}</td>
       <td class="${d===null?'neu':d>=0?'up':'down'}">${d===null?'—':(d>=0?'+':'')+((d)*100).toFixed(2)+'%'}</td>
       <td class="${dp===null?'neu':dp>=0?'up':'down'}">${dp===null?'—':(dp>=0?'+':'')+fmtPct(Math.abs(dp))}</td>
-      <td>${fmtFull$(h.funded)}</td>
-      <td>${fmtFull$(h.collected)}</td>
+      <td>${h.funded?fmtFull$(h.funded):'—'}</td>
+      <td>${h.collected?fmtFull$(h.collected):'—'}</td>
       <td class="${h.defaultAmt>0?'down':''}">${h.defaultAmt?fmtFull$(h.defaultAmt):'—'}</td>
     </tr>`;
   }).join('')}</tbody>`;
 
-  // Default & Collection breakdown by status
-  if(defEl && deals.length){
-    const statusData={};
-    deals.forEach(d=>{
-      const s=d.status||'Unknown';
-      if(!statusData[s]) statusData[s]={status:s,deals:0,funded:0};
-      statusData[s].deals++; statusData[s].funded+=d.amount;
-    });
-    const totalF=deals.reduce((a,d)=>a+d.amount,0);
-    const sRows=Object.values(statusData).sort((a,b)=>b.funded-a.funded);
-    defEl.innerHTML=`<thead><tr>
-      <th>Status</th><th>Deals</th><th>% of Deals</th><th>Funded</th><th>% of Portfolio</th>
-    </tr></thead><tbody>${sRows.map(r=>`<tr>
-      <td><span class="badge ${isPerforming(r.status)?'badge-green':isDefault(r.status)?'badge-red':isSlowPay(r.status)?'badge-orange':'badge-yellow'}">${r.status}</span></td>
-      <td>${r.deals}</td><td>${fmtPct(r.deals/deals.length)}</td>
-      <td>${fmtFull$(r.funded)}</td><td>${fmtPct(r.funded/totalF)}</td>
-    </tr>`).join('')}</tbody>`;
+  // ── Default & Collection breakdown by AM status ─────────────────────────────
+  if(defEl){
+    if(!deals.length){
+      defEl.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">Upload deal data to see status breakdown</td></tr>';
+    } else {
+      const statusData={};
+      deals.forEach(d=>{ const s=d.status||'Unknown';
+        if(!statusData[s]) statusData[s]={status:s,deals:0,funded:0};
+        statusData[s].deals++; statusData[s].funded+=d.amount; });
+      const totalF=deals.reduce((a,d)=>a+d.amount,0);
+      const sRows=Object.values(statusData).sort((a,b)=>b.funded-a.funded);
+      defEl.innerHTML=`<thead><tr>
+        <th>Status</th><th>Deals</th><th>% of Deals</th><th>Funded</th><th>% of Portfolio</th>
+      </tr></thead><tbody>${sRows.map(r=>`<tr>
+        <td><span class="badge ${isPerforming(r.status)?'badge-green':isDefault(r.status)?'badge-red':isSlowPay(r.status)?'badge-orange':'badge-yellow'}">${r.status}</span></td>
+        <td>${r.deals}</td><td>${fmtPct(r.deals/deals.length)}</td>
+        <td>${fmtFull$(r.funded)}</td><td>${fmtPct(r.funded/totalF)}</td>
+      </tr>`).join('')}</tbody>`;
+    }
   }
 }
 
@@ -4105,7 +4131,7 @@ function switchTab(t){
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
-  if(t==='recovery') buildRecoveryTab();
+  if(t==='recovery') requestAnimationFrame(()=>buildRecoveryTab());
 }
 
 // ============================================================
