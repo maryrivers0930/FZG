@@ -123,7 +123,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 .entity-meta{font-size:11px;color:var(--muted)}
 
 /* RECOVERY */
-.rec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
 .rec-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
 .rec-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
 .rec-val{font-size:22px;font-weight:700}
@@ -3549,27 +3549,18 @@ function buildRecoveryTab(){
   const defEl = document.getElementById('recDefaultTable');
   if(!kpiEl) return;
 
-  // Always clear stale placeholder
-  if(!deals.length){
-    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload Closing Report or Advance Funded Report data to see recovery rate analytics</div>';
-    if(tblEl) tblEl.innerHTML='';
-    if(defEl) defEl.innerHTML='';
-    destroyChart('recChart');
-    return;
-  }
-
-  // Aggregate by funded month (YYYY-MM key)
+  // Aggregate deal data by funded month (YYYY-MM key)
   const byPeriod = {};
   deals.forEach(d => {
     const p = d.fundedDate ? d.fundedDate.slice(0,7) : (d._period||'unknown');
     if(!byPeriod[p]) byPeriod[p] = {period:p, funded:0, collected:0, rtr:0, defaultAmt:0, deals:0, origination:0, commission:0};
     const r = byPeriod[p];
-    r.funded += d.amount; r.collected += d.collected; r.rtr += d.rtr; r.deals++;
+    r.funded += d.amount; r.collected += d.collected; r.rtr += (d.rtr||0); r.deals++;
     r.origination += (d.origination||0); r.commission += (d.commission||0);
     if(isDefault(d.status)) r.defaultAmt += d.amount;
   });
 
-  // Recovery Rate = Collected ÷ (Funded − Origination + Commission)  [reference formula]
+  // Recovery Rate = Collected ÷ (Funded − Origination + Commission)
   let hist = Object.values(byPeriod).sort((a,b)=>a.period>b.period?1:-1).filter(r=>r.funded>0);
   hist.forEach(r => {
     const denom = r.funded - (r.origination||0) + (r.commission||0);
@@ -3584,7 +3575,11 @@ function buildRecoveryTab(){
   hist.sort((a,b)=>a.period>b.period?1:-1);
 
   if(!hist.length){
-    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload LendSaaS data to see recovery rate analytics</div>';
+    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload Closing Report or Advance Funded Report data to see recovery rate analytics</div>';
+    if(tblEl) tblEl.innerHTML='';
+    if(defEl) defEl.innerHTML='';
+    destroyChart('recChart');
+    destroyChart('covFeesChart');
     return;
   }
 
@@ -3601,15 +3596,19 @@ function buildRecoveryTab(){
   const overallDenom = totalFunded - totalOrig + totalComm;
   const overallRate  = overallDenom > 0 ? totalColl / overallDenom : 0;
 
-  const portRecRate = calcRecRate(totalColl, totalFunded, totalComm, totalOrig);
-  kpiEl.innerHTML=[
-    {label:'Recovery Rate (Portfolio)', val:(portRecRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded + Comm − Orig)', c:'var(--green)'},
-    {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded − Orig + Comm) (all periods)', c:'var(--green)'},
-    {label:'Latest Period Rate',    val:(last.rate*100).toFixed(2)+'%',   sub:last.period, c:'var(--blue)'},
-    {label:'MoM Change',            val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%', sub:'Rate point change', c:delta>=0?'var(--green)':'var(--red)'},
-    {label:'% Change',              val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)), sub:'MoM percent change', c:deltaPct>=0?'var(--green)':'var(--red)'},
-  ].map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
+  // KPI cards — only show portfolio rate when deal data exists
+  const kpiCards = [];
+  if(deals.length){
+    const portRate = calcRecRate(totalColl, totalFunded, totalComm, totalOrig);
+    kpiCards.push({label:'Recovery Rate (Portfolio)', val:(portRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded + Comm − Orig)', c:'var(--green)'});
+    kpiCards.push({label:'Overall Rate (All Periods)', val:(overallRate*100).toFixed(2)+'%', sub:'Across all filtered deals', c:'var(--green)'});
+  }
+  kpiCards.push({label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%', sub:last.period, c:'var(--blue)'});
+  kpiCards.push({label:'MoM Change', val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%', sub:'Rate point change', c:delta>=0?'var(--green)':'var(--red)'});
+  kpiCards.push({label:'% Change', val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)), sub:'MoM percent change', c:deltaPct>=0?'var(--green)':'var(--red)'});
+  kpiEl.innerHTML = kpiCards.map(k=>`<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`).join('');
 
+  // Recovery Rate History chart (all periods including snapshots)
   makeChart('recChart','line',{
     labels:hist.map(h=>h.period),
     datasets:[{
@@ -3618,8 +3617,8 @@ function buildRecoveryTab(){
     }]
   },{yFmt:v=>v.toFixed(1)+'%'});
 
-  // Recovery Rate % by Period — using calcRecRate (Collected ÷ Funded+Comm−BankFee) per period from filtered deals
-  (()=>{
+  // Recovery Rate % by Period chart (deal data only, using calcRecRate formula)
+  if(deals.length){
     const byPd={};
     deals.forEach(d=>{
       const k=periodKey(d.fundedDate,STATE.groupBy);
@@ -3628,18 +3627,17 @@ function buildRecoveryTab(){
       byPd[k].commission+=(d.commission||0); byPd[k].bankFee+=(d.merchantBankFee||0);
     });
     const pdKeys=Object.keys(byPd).sort();
-    const recByPd=pdKeys.map(p=>({
-      label:periodLabel(p,STATE.groupBy),
-      rate:calcRecRate(byPd[p].collected,byPd[p].funded,byPd[p].commission,byPd[p].bankFee||0)*100
-    }));
     makeChart('covFeesChart','line',{
-      labels:recByPd.map(r=>r.label),
+      labels:pdKeys.map(p=>periodLabel(p,STATE.groupBy)),
       datasets:[{
-        label:'Recovery Rate %', data:recByPd.map(r=>r.rate),
+        label:'Recovery Rate %',
+        data:pdKeys.map(p=>+(calcRecRate(byPd[p].collected,byPd[p].funded,byPd[p].commission,byPd[p].bankFee||0)*100).toFixed(2)),
         borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)', fill:true, tension:.3, pointRadius:4
       }]
     },{yFmt:v=>v.toFixed(1)+'%'});
-  })();
+  } else {
+    destroyChart('covFeesChart');
+  }
 
   // MoM table — newest first
   const rows=[...hist].reverse();
