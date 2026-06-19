@@ -536,11 +536,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
     </div>
     <div class="chart-row">
-      <div class="chart-box">
-        <div class="chart-title">Recovery Rate % by Period</div>
-        <div class="chart-wrap"><canvas id="covFeesChart"></canvas></div>
-      </div>
-      <div class="chart-box">
+      <div class="chart-box" style="grid-column:1/-1">
         <div class="chart-title">Deal Status &amp; Default Exposure</div>
         <div class="chart-wrap"><canvas id="covStatusChart"></canvas></div>
       </div>
@@ -721,9 +717,13 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
   <div id="tab-recovery" class="tab-content">
     <div class="rec-grid" id="recKpiRow"><div class="empty"><div class="empty-icon">📈</div><p>Add recovery snapshots to track MoM changes</p></div></div>
     <div class="chart-row">
-      <div class="chart-box" style="grid-column:1/-1">
+      <div class="chart-box">
+        <div class="chart-title">Recovery Rate % by Period</div>
+        <div class="chart-wrap" style="height:240px"><canvas id="covFeesChart"></canvas></div>
+      </div>
+      <div class="chart-box">
         <div class="chart-title">Recovery Rate History</div>
-        <div class="chart-wrap" style="height:260px"><canvas id="recChart"></canvas></div>
+        <div class="chart-wrap" style="height:240px"><canvas id="recChart"></canvas></div>
       </div>
     </div>
     <div class="section">
@@ -2929,18 +2929,6 @@ function buildCover(deals){
     ]
   },{yFmt:v=>fmt$(v)});
 
-  const recByP=pKeys.map(p=>({
-    label:periodLabel(p,STATE.groupBy),
-    rate:calcRecRate(byP[p].collected,byP[p].funded,byP[p].commission,byP[p].bankFee||0)*100
-  }));
-  makeChart('covFeesChart','line',{
-    labels:recByP.map(r=>r.label),
-    datasets:[{
-      label:'Recovery Rate %',data:recByP.map(r=>r.rate),
-      borderColor:'#3fb950',backgroundColor:'rgba(63,185,80,.15)',fill:true,tension:.3,pointRadius:4
-    }]
-  },{yFmt:v=>v.toFixed(1)+'%'});
-
   const statusAmt={};
   deals.forEach(d=>{ const s=d.status||'Unknown'; statusAmt[s]=(statusAmt[s]||0)+d.amount; });
   const statuses=Object.entries(statusAmt).sort((a,b)=>b[1]-a[1]);
@@ -3247,7 +3235,6 @@ function buildPortfolio(deals){
     {label:'Total Funded',val:fmt$(totalFunded),sub:deals.length+' deals',c:'var(--purple)'},
     {label:'Total RTR',val:fmt$(totalRTR),sub:'Avg factor '+avgFactor.toFixed(4),c:'var(--blue)'},
     {label:'Collected',val:fmt$(totalColl),sub:totalRTR?fmtPct(totalColl/totalRTR)+' of RTR':'—',c:'var(--green)'},
-    {label:'Recovery Rate',val:(calcRecRate(totalColl,totalFunded,totalComm,totalBankFee)*100).toFixed(1)+'%',sub:'(Cash+NonCash Coll) ÷ (Funded+Comm−BankFee)',c:'var(--green)'},
     {label:'Remaining RTR',val:fmt$(totalRem),sub:'Outstanding',c:'var(--yellow)'},
     {label:'Factor Range',val:withFactor.length?minFactor.toFixed(2)+'–'+maxFactor.toFixed(2):'—',sub:'Avg: '+avgFactor.toFixed(4),c:'var(--yellow)'},
     {label:'Default Exp.',val:fmt$(defAmt),sub:defDeals.length+' deals · '+fmtPct(totalFunded?defAmt/totalFunded:0),c:'var(--red)'},
@@ -3329,7 +3316,6 @@ function buildPortfolio(deals){
   document.getElementById('portSyndKpis').innerHTML=[
     {label:'White Labels',val:wlRows.length,sub:'in filtered view',c:'var(--purple)'},
     {label:'Top White Label',val:wlRows[0]?wlRows[0].label:'—',sub:wlRows[0]?fmt$(wlRows[0].funded):'—',c:'var(--blue)'},
-    {label:'Recovery Rate',val:(calcRecRate(totalColl,totalFunded,totalComm,totalBankFee)*100).toFixed(1)+'%',sub:'(Cash+NonCash Coll) ÷ (Funded+Comm−BankFee)',c:'var(--green)'},
     {label:'Default Exposure',val:fmt$(defAmt),sub:defDeals.length+' deals',c:'var(--red)'},
   ].map(k=>`<div class="kpi-card" style="border-top:2px solid ${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val" style="color:${k.c}">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
   const portSyndTbl=document.getElementById('portSyndTable');
@@ -3615,7 +3601,9 @@ function buildRecoveryTab(){
   const overallDenom = totalFunded - totalOrig + totalComm;
   const overallRate  = overallDenom > 0 ? totalColl / overallDenom : 0;
 
+  const portRecRate = calcRecRate(totalColl, totalFunded, totalComm, totalOrig);
   kpiEl.innerHTML=[
+    {label:'Recovery Rate (Portfolio)', val:(portRecRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded + Comm − Orig)', c:'var(--green)'},
     {label:'Overall Recovery Rate', val:(overallRate*100).toFixed(2)+'%', sub:'Collected ÷ (Funded − Orig + Comm) (all periods)', c:'var(--green)'},
     {label:'Latest Period Rate',    val:(last.rate*100).toFixed(2)+'%',   sub:last.period, c:'var(--blue)'},
     {label:'MoM Change',            val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%', sub:'Rate point change', c:delta>=0?'var(--green)':'var(--red)'},
@@ -3629,6 +3617,29 @@ function buildRecoveryTab(){
       borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.15)', fill:true, tension:.3, pointRadius:4,
     }]
   },{yFmt:v=>v.toFixed(1)+'%'});
+
+  // Recovery Rate % by Period — using calcRecRate (Collected ÷ Funded+Comm−BankFee) per period from filtered deals
+  (()=>{
+    const byPd={};
+    deals.forEach(d=>{
+      const k=periodKey(d.fundedDate,STATE.groupBy);
+      if(!byPd[k]) byPd[k]={funded:0,collected:0,commission:0,bankFee:0};
+      byPd[k].funded+=d.amount; byPd[k].collected+=d.collected;
+      byPd[k].commission+=(d.commission||0); byPd[k].bankFee+=(d.merchantBankFee||0);
+    });
+    const pdKeys=Object.keys(byPd).sort();
+    const recByPd=pdKeys.map(p=>({
+      label:periodLabel(p,STATE.groupBy),
+      rate:calcRecRate(byPd[p].collected,byPd[p].funded,byPd[p].commission,byPd[p].bankFee||0)*100
+    }));
+    makeChart('covFeesChart','line',{
+      labels:recByPd.map(r=>r.label),
+      datasets:[{
+        label:'Recovery Rate %', data:recByPd.map(r=>r.rate),
+        borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)', fill:true, tension:.3, pointRadius:4
+      }]
+    },{yFmt:v=>v.toFixed(1)+'%'});
+  })();
 
   // MoM table — newest first
   const rows=[...hist].reverse();
