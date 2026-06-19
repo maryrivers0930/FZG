@@ -2339,8 +2339,13 @@ function buildMultiSelects(deals){
   buildMs('dtype', uniq(deals,d=>d.dealType));
   buildMs('status', uniq(deals,d=>d.status));
   buildMs('engagement', uniq(deals,d=>d.engagement).filter(e=>e&&e!=='Unknown'));
-  buildMs('state', uniq(deals,d=>d.state).filter(Boolean));
-  console.log('[debug] state options:', uniq(deals,d=>d.state).filter(Boolean).length, 'deals:', deals.length, 'sample state:', deals.find(d=>d.state)?.state);
+  const stateOpts = uniq(deals,d=>d.state).filter(Boolean);
+  if(stateOpts.length===0){
+    const dd=document.getElementById('ms-state-dd');
+    if(dd) dd.innerHTML=`<div style="padding:8px;font-size:11px;color:red">DEBUG: 0 states from ${deals.length} deals. sample state: ${deals.find(d=>d.state)?.state||'none'}</div>`;
+  } else {
+    buildMs('state', stateOpts);
+  }
   buildMs('sic', uniq(deals,d=>d.sicIndustry||d.naicsIndustry).filter(Boolean));
   // Syndicator filter: include syndicators from Syndication Report (sl) as well
   const slSyndicators = getSyndReportDeals().map(d=>d.syndicator).filter(Boolean);
