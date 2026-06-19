@@ -4230,7 +4230,7 @@ function buildHistPerfTable(deals){
         ${lrow('Units',r=>r.units,fN)}
         ${lrow('Avg Deal Size',r=>r.units?r.funded/r.units:0,fC)}
         ${lrow('Avg Factor Rate',r=>r.factorCount?r.factorSum/r.factorCount:0,fX,'var(--yellow)')}
-        ${lrow('Avg Term (mo)',r=>r.termCount?r.termSum/r.termCount:0,v=>v?v.toFixed(1)+'mo':'—')}
+        ${lrow('Avg Term (days)',r=>r.termCount?r.termSum/r.termCount:0,v=>v?Math.round(v)+'d':'—')}
         ${lrow('First Time Fundings',r=>r.ftf,fN)}
         ${lrow('FTF %',r=>r.units?r.ftf/r.units:0,fP)}
         ${lsec('FINANCIAL PERFORMANCE')}
