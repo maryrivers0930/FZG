@@ -2340,6 +2340,7 @@ function buildMultiSelects(deals){
   buildMs('status', uniq(deals,d=>d.status));
   buildMs('engagement', uniq(deals,d=>d.engagement).filter(e=>e&&e!=='Unknown'));
   buildMs('state', uniq(deals,d=>d.state).filter(Boolean));
+  console.log('[debug] state options:', uniq(deals,d=>d.state).filter(Boolean).length, 'deals:', deals.length, 'sample state:', deals.find(d=>d.state)?.state);
   buildMs('sic', uniq(deals,d=>d.sicIndustry||d.naicsIndustry).filter(Boolean));
   // Syndicator filter: include syndicators from Syndication Report (sl) as well
   const slSyndicators = getSyndReportDeals().map(d=>d.syndicator).filter(Boolean);
