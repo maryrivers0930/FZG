@@ -1565,6 +1565,13 @@ function parseLendSaas(rows, ent, period, srcType){
     // Closed Reason (Closing Report)
     const closedReason = String(colExact(r,'closed reason') || colFind(r,'closedreason') || '').trim();
 
+    // State (Closing Report / Advanced Funded Col AO)
+    const state = String(colExact(r,'state') || colExact(r,'business state') || colExact(r,'merchant state') || '').trim();
+
+    // SIC Industry (Closing Report Column AL)
+    const sicIndustry = String(colExact(r,'sic industry') || colFind(r,'sicindustry','sic industry') || '').trim();
+    const naicsIndustry = String(colExact(r,'naics industry') || colFind(r,'naicsindustry','naics industry') || '').trim();
+
     const effectivePeriod = (period==='unknown'||period==='__auto__')
       ? (fundedDate ? fundedDate.slice(0,7) : 'unknown')
       : period;
@@ -1611,6 +1618,9 @@ function parseLendSaas(rows, ent, period, srcType){
       businessDaysRemaining,
       daysSinceLastPayment,
       closedReason,
+      state,
+      sicIndustry,
+      naicsIndustry,
       entity: ent.id,
     };
   }).filter(d=>d.amount>0||d.merchant);
