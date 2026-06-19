@@ -159,12 +159,10 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 .ms-year-row{display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;background:var(--bg3);border-bottom:1px solid var(--border);user-select:none;position:sticky;top:0;z-index:1}
 .ms-year-row:hover{background:var(--surface2)}
 .ms-year-row input[type=checkbox]{cursor:pointer;accent-color:var(--purple);flex-shrink:0}
-.ms-year-caret{font-size:9px;color:var(--muted);margin-left:auto;transition:transform .15s}
-.ms-year-caret.open{transform:rotate(180deg)}
+.ms-year-caret{font-size:9px;color:var(--muted);margin-left:auto}
 .ms-month-group{display:none}
-.ms-month-group.open{display:block;padding:4px 0 6px 0;background:var(--surface)}
-.ms-month-cols{display:grid;grid-template-columns:1fr 1fr}
-.ms-month-opt{display:flex;align-items:center;gap:6px;padding:4px 8px 4px 26px;font-size:11px;cursor:pointer;min-height:24px}
+.ms-month-group.open{display:block;padding:2px 0 6px 0;background:var(--surface)}
+.ms-month-opt{display:flex;align-items:center;gap:6px;padding:4px 8px 4px 26px;font-size:11px;cursor:pointer}
 .ms-month-opt:hover{background:var(--surface2)}
 .ms-month-opt input[type=checkbox]{cursor:pointer;accent-color:var(--purple);flex-shrink:0;width:12px;height:12px;margin:0}
 .ms-dropdown.open{display:block}
@@ -2297,33 +2295,19 @@ function buildPeriodMs(periods){
     const months=byYear[y];
     const allChecked=months.every(p=>sel.includes(p));
     const someChecked=months.some(p=>sel.includes(p));
-    // Build month options — always render all 12 slots so both columns are equal height
-    // Left col = months 1-6, right col = months 7-12; slots with no data are empty spacers
-    const allMonthPeriods=Array.from({length:12},(_,i)=>{
-      const mm=String(i+1).padStart(2,'0');
-      return `${y}-${mm}`;
-    });
-    const mkOpt=p=>{
-      const exists=months.includes(p);
-      if(!exists) return `<div class="ms-month-opt" style="pointer-events:none;opacity:.25">
-        <input type="checkbox" disabled> ${MONTH_NAMES[parseInt(p.split('-')[1],10)-1]}
-      </div>`;
+    const monthOpts = months.map(p=>{
       return `<div class="ms-month-opt" onclick="toggleMsOpt('period','${p}',this)">
         <input type="checkbox" ${sel.includes(p)?'checked':''} onclick="event.stopPropagation()">
         ${MONTH_NAMES[parseInt(p.split('-')[1],10)-1]}
       </div>`;
-    };
-    const leftCol  = allMonthPeriods.slice(0,6).map(mkOpt).join('');
-    const rightCol = allMonthPeriods.slice(6).map(mkOpt).join('');
+    }).join('');
     return `<div>
       <div class="ms-year-row" onclick="togglePeriodYear('${y}',event)">
         <input type="checkbox" ${allChecked?'checked':''} id="pyr-cb-${y}" onclick="event.stopPropagation();togglePeriodYearCb('${y}',this)">
         <span>${y}</span>
-        <span class="ms-year-caret" id="pyr-caret-${y}">▼</span>
+        <span class="ms-year-caret" id="pyr-caret-${y}">▶</span>
       </div>
-      <div class="ms-month-group" id="pyr-months-${y}">
-        <div class="ms-month-cols"><div>${leftCol}</div><div>${rightCol}</div></div>
-      </div>
+      <div class="ms-month-group" id="pyr-months-${y}">${monthOpts}</div>
     </div>`;
   }).join('');
   // Set indeterminate state (can only be done via JS property, not attribute)
@@ -2340,7 +2324,7 @@ function togglePeriodYear(y, e){
   const caret=document.getElementById('pyr-caret-'+y);
   if(!grp) return;
   const open=grp.classList.toggle('open');
-  if(caret) caret.classList.toggle('open', open);
+  if(caret) caret.textContent = open ? '▼' : '▶';
 }
 function togglePeriodYearCb(y, cb){
   const dd=document.getElementById('ms-period-dd');
