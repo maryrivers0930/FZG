@@ -573,7 +573,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="section">
       <div class="section-hdr">
         <span class="section-title">Deal Tier Breakdown</span>
-        <span class="section-sub">Total · Under $500K · $500K–$1M · Over $1M</span>
+        <span class="section-sub">Under $25K · $25K–$50K · $50K–$100K · $100K–$250K · $250K–$500K · $500K–$1M · $1M+</span>
       </div>
       <div class="tbl-wrap"><table class="data-tbl" id="coverTierTable"></table></div>
     </div>
@@ -2322,9 +2322,13 @@ function sizeBucket(amt){
 }
 // Tier grouping: total / under $500K / $500K-$1M / over $1M
 function tierBucket(amt){
-  if(amt<500000) return 'Under $500K';
+  if(amt<25000)   return 'Under $25K';
+  if(amt<50000)   return '$25K–$50K';
+  if(amt<100000)  return '$50K–$100K';
+  if(amt<250000)  return '$100K–$250K';
+  if(amt<500000)  return '$250K–$500K';
   if(amt<1000000) return '$500K–$1M';
-  return 'Over $1M';
+  return '$1M+';
 }
 // Median of an array
 function median(arr){
@@ -2964,7 +2968,7 @@ function buildCover(deals){
   <tbody>${isoRows.map(r=>`<tr><td><a href="#" onclick="event.preventDefault();drillToPerf('iso','${r.iso.replace(/'/g,"\\'")}')" style="color:var(--purple);text-decoration:none">${r.iso}</a></td><td>${r.deals}</td><td>${fmtFull$(r.funded)}</td><td>${fmtPct(totalFunded?r.funded/totalFunded:0)}</td><td>${fmtFull$(r.collected)}</td></tr>`).join('')}</tbody>`;
 
   // Tier Breakdown table
-  const tierOrder=['Under $500K','$500K–$1M','Over $1M'];
+  const tierOrder=['Under $25K','$25K–$50K','$50K–$100K','$100K–$250K','$250K–$500K','$500K–$1M','$1M+'];
   const tierData={};
   deals.forEach(d=>{
     const b=tierBucket(d.amount);
