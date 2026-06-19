@@ -1051,6 +1051,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     delete ent.deals;
     // Ensure recoveryHistory is always an array (old SNAP versions stored it as object)
     if(!Array.isArray(ent.recoveryHistory)) ent.recoveryHistory = [];
+    // Back-fill sicIndustry from sicCode for deals saved before this field was derived
+    Object.values(ent.dealsByPeriod||{}).forEach(arr=>(arr||[]).forEach(d=>{
+      if(!d.sicIndustry && d.sicCode) d.sicIndustry = sicCodeToIndustry(d.sicCode);
+    }));
   });
 
   // Seed FZG recovery history if empty
@@ -1323,6 +1327,78 @@ function buildPeriodList(){
   }).join('');
 }
 
+// Maps a numeric SIC code (string or number) to a human-readable major-group name.
+// Non-numeric values (already text) are returned as-is.
+function sicCodeToIndustry(code){
+  const s = String(code||'').trim();
+  if(!s) return '';
+  const c = parseInt(s, 10);
+  if(isNaN(c)) return s; // already a text industry name
+  if(c <  200) return 'Agriculture';
+  if(c < 1000) return 'Agriculture, Forestry & Fishing';
+  if(c < 1500) return 'Mining';
+  if(c < 1600) return 'General Building Contractors';
+  if(c < 1700) return 'Heavy Construction Contractors';
+  if(c < 2000) return 'Special Trade Contractors';
+  if(c < 2100) return 'Food & Kindred Products';
+  if(c < 2200) return 'Tobacco Products';
+  if(c < 2300) return 'Textile Mill Products';
+  if(c < 2400) return 'Apparel & Textile Products';
+  if(c < 2500) return 'Lumber & Wood Products';
+  if(c < 2600) return 'Furniture & Fixtures';
+  if(c < 2700) return 'Paper & Allied Products';
+  if(c < 2800) return 'Printing & Publishing';
+  if(c < 2900) return 'Chemicals & Allied Products';
+  if(c < 3000) return 'Petroleum & Coal Products';
+  if(c < 3100) return 'Rubber & Plastics Products';
+  if(c < 3200) return 'Leather & Leather Products';
+  if(c < 3300) return 'Stone, Clay & Glass Products';
+  if(c < 3400) return 'Primary Metal Industries';
+  if(c < 3500) return 'Fabricated Metal Products';
+  if(c < 3600) return 'Industrial Machinery & Equipment';
+  if(c < 3700) return 'Electronic & Electrical Equipment';
+  if(c < 3800) return 'Transportation Equipment';
+  if(c < 3900) return 'Measuring Instruments & Optics';
+  if(c < 4000) return 'Misc Manufacturing';
+  if(c < 4200) return 'Railroad & Local Transit';
+  if(c < 4500) return 'Trucking, Warehousing & Water Transport';
+  if(c < 4600) return 'Air Transportation';
+  if(c < 4800) return 'Transportation Services & Pipelines';
+  if(c < 4900) return 'Communications';
+  if(c < 5000) return 'Electric, Gas & Sanitary Services';
+  if(c < 5200) return 'Wholesale Trade - Durable Goods';
+  if(c < 5300) return 'Wholesale Trade - Nondurable Goods';
+  if(c < 5400) return 'Retail - Building Materials & Hardware';
+  if(c < 5500) return 'Retail - General Merchandise & Food';
+  if(c < 5600) return 'Retail - Auto Dealers & Service Stations';
+  if(c < 5700) return 'Retail - Apparel & Accessory Stores';
+  if(c < 5800) return 'Retail - Home Furniture & Furnishings';
+  if(c < 5900) return 'Retail - Eating & Drinking Places';
+  if(c < 6000) return 'Retail - Misc Stores';
+  if(c < 6100) return 'Finance - Depository Institutions';
+  if(c < 6200) return 'Finance - Nondepository Credit';
+  if(c < 6300) return 'Finance - Security & Commodity Brokers';
+  if(c < 6400) return 'Insurance Carriers';
+  if(c < 6500) return 'Insurance Agents & Services';
+  if(c < 6800) return 'Real Estate';
+  if(c < 7000) return 'Holding & Investment Offices';
+  if(c < 7200) return 'Hotels & Lodging';
+  if(c < 7300) return 'Personal Services';
+  if(c < 7500) return 'Business Services';
+  if(c < 7600) return 'Auto Repair, Services & Parking';
+  if(c < 7700) return 'Misc Repair Services';
+  if(c < 7900) return 'Motion Pictures & Amusement';
+  if(c < 8000) return 'Amusement & Recreation Services';
+  if(c < 8100) return 'Health Services';
+  if(c < 8200) return 'Legal Services';
+  if(c < 8300) return 'Educational Services';
+  if(c < 8400) return 'Social Services';
+  if(c < 8700) return 'Museums & Cultural Institutions';
+  if(c < 8900) return 'Engineering & Management Services';
+  if(c < 9000) return 'Services - Misc';
+  return 'Public Administration';
+}
+
 function colFind(row, ...names){
   for(const n of names){
     for(const k of Object.keys(row)){
@@ -1568,9 +1644,10 @@ function parseLendSaas(rows, ent, period, srcType){
     // State (Closing Report / Advanced Funded Col AO)
     const state = String(colExact(r,'state') || colExact(r,'business state') || colExact(r,'merchant state') || '').trim();
 
-    // SIC Industry (Closing Report Column AL)
-    const sicIndustry = String(colExact(r,'sic industry') || colFind(r,'sicindustry','sic industry') || '').trim();
-    const naicsIndustry = String(colExact(r,'naics industry') || colFind(r,'naicsindustry','naics industry') || '').trim();
+    // SIC: Closing Report has "SIC Code" (column CQ) — map numeric codes to industry names
+    const sicCodeRaw = String(colExact(r,'sic code') || colFind(r,'siccode') || '').trim();
+    const sicIndustry = sicCodeRaw ? sicCodeToIndustry(sicCodeRaw) : (String(colExact(r,'sic industry') || colFind(r,'sicindustry') || '').trim());
+    const naicsIndustry = String(colExact(r,'naics industry') || colFind(r,'naicsindustry') || '').trim();
 
     const effectivePeriod = (period==='unknown'||period==='__auto__')
       ? (fundedDate ? fundedDate.slice(0,7) : 'unknown')
@@ -1687,7 +1764,7 @@ function parseAdvanceFunded(rows, ent, period){
     const cashCollRev   = pNum(r['Cash Collections - Revenue']);
     const state         = String(r['State']||'').trim();
     const sicCode       = String(r['SIC Code']||'').trim();
-    const sicIndustry   = String(r['SIC Industry']||'').trim();
+    const sicIndustry   = String(r['SIC Industry']||'').trim() || sicCodeToIndustry(sicCode);
     const naicsCode     = String(r['NAICS Code']||'').trim();
     const naicsIndustry = String(r['NAICS Industry']||'').trim();
     const avgFico       = pNum(r['Average Fico']);
