@@ -737,7 +737,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     </div>
     <div class="section">
       <div class="section-hdr">
-        <span class="section-title">Month-over-Month Recovery Rate</span>
+        <span class="section-title" id="recTableTitle">Period-over-Period Recovery Rate</span>
         <button class="btn btn-ghost btn-sm" onclick="openAddRecovery()">+ Add Manual Snapshot</button>
       </div>
       <div class="tbl-wrap"><table class="data-tbl" id="recTable"></table></div>
@@ -3756,17 +3756,34 @@ function buildRecoveryTab(){
     `<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`
   ).join('');
 
+  // ── Roll up byPeriod into the selected groupBy grain ──────────────────────
+  // byPeriod is always monthly (YYYY-MM). For quarter/year we merge buckets.
+  const grouped = {};
+  Object.values(byPeriod).forEach(r => {
+    const key = periodKey(r.period, STATE.groupBy);
+    if(!grouped[key]) grouped[key] = {key, label:periodLabel(r.period, STATE.groupBy),
+                                       funded:0, collected:0, commission:0, bankFee:0,
+                                       defaultAmt:0, deals:0, rtr:0};
+    const g = grouped[key];
+    g.funded     += r.funded;
+    g.collected  += r.collected;
+    g.commission += r.commission;
+    g.bankFee    += r.bankFee;
+    g.defaultAmt += r.defaultAmt;
+    g.deals      += r.deals;
+    g.rtr        += r.rtr;
+  });
+  const groupedRows = Object.values(grouped).sort((a,b)=>a.key>b.key?1:-1);
+  groupedRows.forEach(g => { g.rate = calcRecRate(g.collected, g.funded, g.commission, g.bankFee); });
+
   // ── Charts — only render when tab is visible ────────────────────────────────
   if(tabVisible){
-    // "Recovery Rate History" — all periods (deal data + snapshots)
-    // "Recovery Rate % by Period" — deal data only
-    if(deals.length && Object.keys(byPeriod).length){
-      const dealKeys = Object.keys(byPeriod).sort();
+    if(groupedRows.length){
       makeChart('covFeesChart','line',{
-        labels: dealKeys.map(p=>periodLabel(p, STATE.groupBy)),
+        labels: groupedRows.map(g=>g.label),
         datasets:[{
           label:'Recovery Rate %',
-          data: dealKeys.map(p=>+(byPeriod[p].rate*100).toFixed(2)),
+          data: groupedRows.map(g=>+(g.rate*100).toFixed(2)),
           borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)',
           fill:true, tension:.3, pointRadius:4
         }]
@@ -3777,9 +3794,13 @@ function buildRecoveryTab(){
   }
 
   // ── Month-over-Month table (newest first) ───────────────────────────────────
-  const rows = [...hist].reverse();
+  // Table uses the same grouped+rolled-up data as the chart (newest first)
+  const tblPeriodLabel = STATE.groupBy==='year' ? 'Year' : STATE.groupBy==='quarter' ? 'Quarter' : 'Month';
+  const recTitleEl = document.getElementById('recTableTitle');
+  if(recTitleEl) recTitleEl.textContent = tblPeriodLabel+'-over-'+tblPeriodLabel+' Recovery Rate';
+  const rows = [...groupedRows].reverse();
   if(tblEl) tblEl.innerHTML=`<thead><tr>
-    <th>Period</th><th>Recovery Rate</th><th>Prev Rate</th>
+    <th>${tblPeriodLabel}</th><th>Recovery Rate</th><th>Prev Rate</th>
     <th>Chg (pts)</th><th>% Chg</th><th>Funded</th><th>Collected</th><th>Default Amt</th>
   </tr></thead><tbody>${rows.map((h,i)=>{
     const prevH = rows[i+1];
@@ -3787,7 +3808,7 @@ function buildRecoveryTab(){
     const dp = prevH && prevH.rate ? d/prevH.rate : null;
     const rateColor = h.rate>=1?'var(--green)':h.rate>=0.8?'var(--orange)':'var(--red)';
     return `<tr>
-      <td><b>${h.period}</b>${h._snapshot?'<span style="font-size:9px;color:var(--muted);margin-left:4px">snapshot</span>':''}</td>
+      <td><b>${h.label}</b></td>
       <td><b style="color:${rateColor}">${(h.rate*100).toFixed(2)}%</b></td>
       <td>${prevH?(prevH.rate*100).toFixed(2)+'%':'—'}</td>
       <td class="${d===null?'neu':d>=0?'up':'down'}">${d===null?'—':(d>=0?'+':'')+((d)*100).toFixed(2)+'%'}</td>
