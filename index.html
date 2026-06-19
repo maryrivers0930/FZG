@@ -3540,7 +3540,9 @@ function buildTimeTab(deals){
 // RECOVERY RATES TAB
 // ============================================================
 function buildRecoveryTab(){
-  const deals = getFilteredDeals();
+  // Recovery rate analysis always uses all-time deal data regardless of sidebar
+  // date filters, so historical trends are never cut off by the period selector.
+  const deals = getAllDeals(activeEntity());
   const ent   = activeEntity();
   const kpiEl = document.getElementById('recKpiRow');
   const tblEl = document.getElementById('recTable');
@@ -3587,16 +3589,14 @@ function buildRecoveryTab(){
 
   // ── No data at all ──────────────────────────────────────────────────────────
   if(!hist.length){
-    const f = STATE.filters||{};
     kpiEl.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted)">
       Upload a Closing Report or Advanced Funded Report to see recovery rate analytics.<br>
       <div style="margin-top:12px;font-size:11px;font-family:monospace;text-align:left;display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;line-height:1.8">
         🔍 <b>Diagnostics</b><br>
-        Deals from getFilteredDeals(): <b>${deals.length}</b><br>
+        Deals from getAllDeals (all history): <b>${deals.length}</b><br>
         Periods in byPeriod: <b>${Object.keys(byPeriod).length}</b><br>
         Manual snapshots: <b>${(ent.recoveryHistory||[]).length}</b><br>
-        Filter — dateFrom: ${f.dateFrom||'(none)'} &nbsp; dateTo: ${f.dateTo||'(none)'}<br>
-        Filter — status: ${f.status||'(all)'} &nbsp; isoId: ${f.isoId||'(all)'}
+        ${deals.length===0?'⚠️ No ls/af deals with merchant + fundedDate found.':'⚠️ All deals have funded amount = 0 or missing.'}
       </div>
     </div>`;
     if(tblEl) tblEl.innerHTML='';
@@ -3660,14 +3660,13 @@ function buildRecoveryTab(){
     }
     const body = document.getElementById('recDiagBody');
 
-    // Active filters
+    // Active filters (note: Recovery tab uses ALL deals — date filter does NOT apply here)
     const f = STATE.filters||{};
     const filterLines = [
+      `data source: getAllDeals (date filter NOT applied — shows all history)`,
       `groupBy: ${STATE.groupBy}`,
-      `dateFrom: ${f.dateFrom||'(none)'}`,
-      `dateTo: ${f.dateTo||'(none)'}`,
-      `status: ${f.status||'(all)'}`,
-      `isoId: ${f.isoId||'(all)'}`,
+      `sidebar dateFrom: ${f.dateFrom||'(none)'} [ignored by this tab]`,
+      `sidebar dateTo: ${f.dateTo||'(none)'} [ignored by this tab]`,
     ];
 
     // byPeriod table rows
