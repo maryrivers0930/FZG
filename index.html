@@ -1027,8 +1027,13 @@ function loadState(){
         });
       });
       try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      // DEBUG: show load source in page title
+      const _srcLabel = window.__SNAPSHOT__ ? 'SNAP' : 'localStorage';
+      const _dealCount = (src.entities||[]).flatMap(e=>Object.values(e.dealsByPeriod||{})).flat().length;
+      const _withState = (src.entities||[]).flatMap(e=>Object.values(e.dealsByPeriod||{})).flat().filter(d=>d.state).length;
+      document.title = `[${_srcLabel} ${_dealCount}d ${_withState}s] FZG Portfolio`;
     }
-  }catch(e){}
+  }catch(e){ document.title='[loadState ERROR: '+e.message+']'; }
 }
 function saveState(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify({entities:STATE.entities, activeEntityId:STATE.activeEntityId})); }catch(e){}
