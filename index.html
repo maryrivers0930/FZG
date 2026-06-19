@@ -3640,7 +3640,7 @@ function buildRecoveryTab(){
   ).join('');
 
   // ── Diagnostics panel ──────────────────────────────────────────────────────
-  (()=>{
+  try{(()=>{
     let diagEl = document.getElementById('recDiagPanel');
     if(!diagEl){
       diagEl = document.createElement('div');
@@ -3648,15 +3648,20 @@ function buildRecoveryTab(){
       diagEl.style.cssText='margin:0 0 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:11px;font-family:monospace;overflow:hidden';
       const hdr = document.createElement('div');
       hdr.style.cssText='padding:8px 12px;background:var(--bg3);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:12px';
-      hdr.innerHTML='🔍 Data Diagnostics <span style="color:var(--muted);font-weight:400">click to expand</span>';
+      hdr.innerHTML='🔍 Data Diagnostics <span id="recDiagToggle" style="color:var(--muted);font-weight:400">click to collapse</span>';
       const body = document.createElement('div');
       body.id='recDiagBody';
-      body.style.cssText='display:none;padding:12px;overflow:auto;max-height:420px';
-      hdr.onclick=()=>{ body.style.display = body.style.display==='none'?'block':'none'; };
+      body.style.cssText='display:block;padding:12px;overflow:auto;max-height:420px';
+      hdr.onclick=()=>{
+        const shown = body.style.display!=='none';
+        body.style.display = shown?'none':'block';
+        const t=document.getElementById('recDiagToggle');
+        if(t) t.textContent = shown?'click to expand':'click to collapse';
+      };
       diagEl.appendChild(hdr);
       diagEl.appendChild(body);
       // Insert after KPI row
-      kpiEl.parentNode.insertBefore(diagEl, kpiEl.nextSibling);
+      if(kpiEl.parentNode) kpiEl.parentNode.insertBefore(diagEl, kpiEl.nextSibling);
     }
     const body = document.getElementById('recDiagBody');
 
@@ -3717,7 +3722,7 @@ function buildRecoveryTab(){
         <tbody>${sampleDeals}</tbody>
       </table></div>` : '<p style="color:var(--red)">⚠️ No deals returned by getFilteredDeals()</p>'}
     `;
-  })();
+  })()}catch(diagErr){ console.error('Recovery diagnostics error:', diagErr); }
 
   // ── Charts — only render when tab is visible ────────────────────────────────
   if(tabVisible){
@@ -4222,7 +4227,14 @@ function switchTab(t){
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
-  if(t==='recovery') requestAnimationFrame(()=>buildRecoveryTab());
+  if(t==='recovery') requestAnimationFrame(()=>{
+    try{ buildRecoveryTab(); }
+    catch(e){
+      console.error('buildRecoveryTab error:', e);
+      const k=document.getElementById('recKpiRow');
+      if(k) k.innerHTML=`<div style="padding:16px;color:var(--red);font-family:monospace;font-size:11px"><b>❌ Recovery tab error:</b><br>${e.message}<br><pre style="margin-top:8px;white-space:pre-wrap">${e.stack}</pre></div>`;
+    }
+  });
 }
 
 // ============================================================
