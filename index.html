@@ -3587,7 +3587,18 @@ function buildRecoveryTab(){
 
   // ── No data at all ──────────────────────────────────────────────────────────
   if(!hist.length){
-    kpiEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Upload a Closing Report or Advanced Funded Report to see recovery rate analytics.</div>';
+    const f = STATE.filters||{};
+    kpiEl.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted)">
+      Upload a Closing Report or Advanced Funded Report to see recovery rate analytics.<br>
+      <div style="margin-top:12px;font-size:11px;font-family:monospace;text-align:left;display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;line-height:1.8">
+        🔍 <b>Diagnostics</b><br>
+        Deals from getFilteredDeals(): <b>${deals.length}</b><br>
+        Periods in byPeriod: <b>${Object.keys(byPeriod).length}</b><br>
+        Manual snapshots: <b>${(ent.recoveryHistory||[]).length}</b><br>
+        Filter — dateFrom: ${f.dateFrom||'(none)'} &nbsp; dateTo: ${f.dateTo||'(none)'}<br>
+        Filter — status: ${f.status||'(all)'} &nbsp; isoId: ${f.isoId||'(all)'}
+      </div>
+    </div>`;
     if(tblEl) tblEl.innerHTML='';
     if(defEl) defEl.innerHTML='';
     if(tabVisible){ destroyChart('recChart'); destroyChart('covFeesChart'); }
@@ -3627,6 +3638,87 @@ function buildRecoveryTab(){
   kpiEl.innerHTML = kpiCards.map(k=>
     `<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`
   ).join('');
+
+  // ── Diagnostics panel ──────────────────────────────────────────────────────
+  (()=>{
+    let diagEl = document.getElementById('recDiagPanel');
+    if(!diagEl){
+      diagEl = document.createElement('div');
+      diagEl.id = 'recDiagPanel';
+      diagEl.style.cssText='margin:0 0 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:11px;font-family:monospace;overflow:hidden';
+      const hdr = document.createElement('div');
+      hdr.style.cssText='padding:8px 12px;background:var(--bg3);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:12px';
+      hdr.innerHTML='🔍 Data Diagnostics <span style="color:var(--muted);font-weight:400">click to expand</span>';
+      const body = document.createElement('div');
+      body.id='recDiagBody';
+      body.style.cssText='display:none;padding:12px;overflow:auto;max-height:420px';
+      hdr.onclick=()=>{ body.style.display = body.style.display==='none'?'block':'none'; };
+      diagEl.appendChild(hdr);
+      diagEl.appendChild(body);
+      // Insert after KPI row
+      kpiEl.parentNode.insertBefore(diagEl, kpiEl.nextSibling);
+    }
+    const body = document.getElementById('recDiagBody');
+
+    // Active filters
+    const f = STATE.filters||{};
+    const filterLines = [
+      `groupBy: ${STATE.groupBy}`,
+      `dateFrom: ${f.dateFrom||'(none)'}`,
+      `dateTo: ${f.dateTo||'(none)'}`,
+      `status: ${f.status||'(all)'}`,
+      `isoId: ${f.isoId||'(all)'}`,
+    ];
+
+    // byPeriod table rows
+    const periodKeys = Object.keys(byPeriod).sort();
+    const periodRows = periodKeys.map(p=>{
+      const r = byPeriod[p];
+      return `<tr>
+        <td>${r.period}</td><td>${r.deals}</td>
+        <td>${fmtFull$(r.funded)}</td>
+        <td>${fmtFull$(r.collected)}</td>
+        <td>${fmtFull$(r.commission)}</td>
+        <td>${fmtFull$(r.bankFee)}</td>
+        <td>${r.funded>0?(r.rate*100).toFixed(2)+'%':'—'}</td>
+      </tr>`;
+    }).join('');
+
+    // Sample deals (first 5)
+    const sampleDeals = deals.slice(0,5).map((d,i)=>`<tr>
+      <td>${i+1}</td>
+      <td>${d.merchant||'?'}</td>
+      <td>${d.fundedDate||'?'}</td>
+      <td>${d._srcType||'?'}</td>
+      <td>${fmtFull$(d.amount)}</td>
+      <td>${fmtFull$(d.collected)}</td>
+      <td>${fmtFull$(d.commission||0)}</td>
+      <td>${fmtFull$(d.merchantBankFee||0)}</td>
+      <td>${d.status||'?'}</td>
+    </tr>`).join('');
+
+    body.innerHTML = `
+      <div style="margin-bottom:8px;color:var(--yellow);font-weight:600">📊 Summary</div>
+      <div style="margin-bottom:12px;line-height:1.8">
+        Total deals (getFilteredDeals): <b>${deals.length}</b><br>
+        Periods aggregated (byPeriod): <b>${periodKeys.length}</b><br>
+        Hist rows (deal+snapshot): <b>${hist.length}</b><br>
+        Tab visible (charts active): <b>${tabVisible}</b>
+      </div>
+      <div style="margin-bottom:8px;color:var(--yellow);font-weight:600">🔧 Active Filters</div>
+      <pre style="margin:0 0 12px;color:var(--muted);white-space:pre-wrap">${filterLines.join('\n')}</pre>
+      <div style="margin-bottom:8px;color:var(--yellow);font-weight:600">📅 By-Period Aggregation (${periodKeys.length} periods)</div>
+      ${periodKeys.length ? `<div style="overflow-x:auto;margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead><tr style="color:var(--muted)">${['Period','Deals','Funded','Collected','Commission','BankFee','Rate'].map(h=>`<th style="padding:3px 6px;text-align:left;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+        <tbody>${periodRows}</tbody>
+      </table></div>` : '<p style="color:var(--red)">⚠️ byPeriod is empty — no deals passed aggregation</p>'}
+      <div style="margin-bottom:8px;color:var(--yellow);font-weight:600">🔎 Sample Deals (first ${Math.min(5,deals.length)} of ${deals.length})</div>
+      ${deals.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead><tr style="color:var(--muted)">${['#','Merchant','FundedDate','SrcType','Amount','Collected','Commission','BankFee','Status'].map(h=>`<th style="padding:3px 6px;text-align:left;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+        <tbody>${sampleDeals}</tbody>
+      </table></div>` : '<p style="color:var(--red)">⚠️ No deals returned by getFilteredDeals()</p>'}
+    `;
+  })();
 
   // ── Charts — only render when tab is visible ────────────────────────────────
   if(tabVisible){
