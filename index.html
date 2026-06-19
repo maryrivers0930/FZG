@@ -719,13 +719,9 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="empty"><div class="empty-icon">📈</div><p>Upload a Closing Report or Advanced Funded Report to see recovery rate metrics.</p></div>
     </div>
     <div class="chart-row">
-      <div class="chart-box">
+      <div class="chart-box" style="grid-column:1/-1">
         <div class="chart-title">Recovery Rate % by Period <span style="font-size:10px;color:var(--muted);font-weight:400">(from uploaded deal data)</span></div>
-        <div class="chart-wrap" style="height:240px"><canvas id="covFeesChart"></canvas></div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title">Recovery Rate History <span style="font-size:10px;color:var(--muted);font-weight:400">(deal data + manual snapshots)</span></div>
-        <div class="chart-wrap" style="height:240px"><canvas id="recChart"></canvas></div>
+        <div class="chart-wrap" style="height:260px"><canvas id="covFeesChart"></canvas></div>
       </div>
     </div>
     <div class="section">
@@ -3603,7 +3599,7 @@ function buildRecoveryTab(){
     </div>`;
     if(tblEl) tblEl.innerHTML='';
     if(defEl) defEl.innerHTML='';
-    if(tabVisible){ destroyChart('recChart'); destroyChart('covFeesChart'); }
+    if(tabVisible){ destroyChart('covFeesChart'); }
     return;
   }
 
@@ -3729,17 +3725,7 @@ function buildRecoveryTab(){
   // ── Charts — only render when tab is visible ────────────────────────────────
   if(tabVisible){
     // "Recovery Rate History" — all periods (deal data + snapshots)
-    makeChart('recChart','line',{
-      labels: hist.map(h=>h.period),
-      datasets:[{
-        label:'Recovery Rate %',
-        data: hist.map(h=>+(h.rate*100).toFixed(2)),
-        borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.15)',
-        fill:true, tension:.3, pointRadius:4,
-      }]
-    },{yFmt:v=>v.toFixed(1)+'%'});
-
-    // "Recovery Rate % by Period" — deal data only (same calcRecRate formula)
+    // "Recovery Rate % by Period" — deal data only
     if(deals.length && Object.keys(byPeriod).length){
       const dealKeys = Object.keys(byPeriod).sort();
       makeChart('covFeesChart','line',{
