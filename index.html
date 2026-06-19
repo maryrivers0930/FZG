@@ -152,7 +152,10 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 /* MULTI-SELECT DROPDOWN */
 .ms-wrap{position:relative}
 .ms-display{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 7px;border-radius:5px;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:28px}
-.ms-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:6px;z-index:50;max-height:180px;overflow-y:auto;display:none;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.ms-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:6px;z-index:50;max-height:220px;overflow-y:auto;display:none;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.ms-dropdown.open{display:block}
+.ms-search{position:sticky;top:0;width:100%;box-sizing:border-box;padding:6px 8px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:11px;outline:none;z-index:1}
+.ms-search::placeholder{color:var(--muted)}
 .ms-dropdown.open{display:block}
 .ms-option{padding:6px 10px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px}
 .ms-option:hover{background:var(--surface2)}
@@ -2255,16 +2258,36 @@ function buildMultiSelects(deals){
 function buildMs(key, options){
   const dd = document.getElementById('ms-'+key+'-dd');
   if(!dd) return;
-  dd.innerHTML = options.map(o=>`
-    <div class="ms-option" onclick="toggleMsOpt('${key}','${o.replace(/'/g,"\\'")}',this)">
+  // Keys with many options get a sticky search box
+  const searchable = ['iso','syndicator','wl','status','sic','state'];
+  const searchHtml = searchable.includes(key)
+    ? `<input class="ms-search" placeholder="Search…" oninput="filterMsOptions('${key}',this.value)" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">`
+    : '';
+  const optionsHtml = options.map(o=>`
+    <div class="ms-option" data-val="${o.replace(/"/g,'&quot;')}" onclick="toggleMsOpt('${key}','${o.replace(/'/g,"\\'")}',this)">
       <input type="checkbox" ${MS_STATE[key].includes(o)?'checked':''} onclick="event.stopPropagation()"> ${o}
     </div>`).join('');
+  dd.innerHTML = searchHtml + optionsHtml;
+}
+function filterMsOptions(key, query){
+  const dd = document.getElementById('ms-'+key+'-dd');
+  if(!dd) return;
+  const q = query.toLowerCase();
+  dd.querySelectorAll('.ms-option').forEach(el=>{
+    const val = (el.dataset.val||'').toLowerCase();
+    el.style.display = val.includes(q) ? '' : 'none';
+  });
 }
 function toggleMs(key){
   const dd = document.getElementById('ms-'+key+'-dd');
   const isOpen = dd.classList.contains('open');
   document.querySelectorAll('.ms-dropdown').forEach(d=>d.classList.remove('open'));
-  if(!isOpen) dd.classList.add('open');
+  if(!isOpen){
+    dd.classList.add('open');
+    // Focus search box if present
+    const inp = dd.querySelector('.ms-search');
+    if(inp){ inp.value=''; filterMsOptions(key,''); requestAnimationFrame(()=>inp.focus()); }
+  }
 }
 function toggleMsOpt(key,val,el){
   const cb = el.querySelector('input');
