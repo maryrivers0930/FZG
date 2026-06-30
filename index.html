@@ -402,8 +402,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="tab" onclick="switchTab('dimensions')">🏷️ Dimensions</div>
     <div class="tab" onclick="switchTab('time')">📅 Time Analysis</div>
     <div class="tab" onclick="switchTab('recovery')">📈 Recovery Rates</div>
-    <div class="tab" onclick="switchTab('fssummary')">📋 FS Summary</div>
-    <div class="tab" onclick="switchTab('variance')">📉 Variance Analysis</div>
     <div class="tab" onclick="switchTab('upload')">📁 Data Upload</div>
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
   </div>
@@ -609,6 +607,62 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
       <div class="tbl-wrap"><table class="data-tbl" id="coverDealTable"></table></div>
     </div>
+
+    <!-- FS Summary (workbook data) -->
+    <div class="section" style="margin-top:20px" id="fsSummarySection">
+      <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsSummaryBody')">
+        <span class="section-title">FS Summary</span>
+        <span class="section-sub">
+          <select id="fsPeriodSel" onchange="buildFSWorkbookSections()" onclick="event.stopPropagation()"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer;margin-left:8px"></select>
+          <span style="margin-left:12px;font-size:11px;color:var(--muted)" id="fsSummarySub"></span>
+        </span>
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsSummaryToggle">▲ collapse</span>
+      </div>
+      <div id="fsSummaryBody">
+        <!-- Balance Sheet -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">Balance Sheet</div>
+          <div class="tbl-wrap"><table class="data-tbl" id="fsBSTable" style="min-width:420px"></table></div>
+        </div>
+        <!-- Income Statement -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">Income Statement</div>
+          <div class="tbl-wrap"><table class="data-tbl" id="fsISTable" style="min-width:420px"></table></div>
+        </div>
+        <!-- P&L KPIs -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">P&amp;L Metrics</div>
+          <div class="tbl-wrap"><table class="data-tbl" id="fsKpiTable" style="min-width:420px"></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variance Analysis (workbook data) -->
+    <div class="section" style="margin-top:16px" id="fsVarianceSection">
+      <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsVarianceBody')">
+        <span class="section-title">Variance Analysis</span>
+        <span class="section-sub">
+          <select id="varCurrSel" onchange="buildFSWorkbookSections()" onclick="event.stopPropagation()"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer;margin-left:8px"></select>
+          <span style="color:var(--muted);font-size:11px;margin:0 4px">vs.</span>
+          <select id="varPriorSel" onchange="buildFSWorkbookSections()" onclick="event.stopPropagation()"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer"></select>
+        </span>
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsVarianceToggle">▲ collapse</span>
+      </div>
+      <div id="fsVarianceBody">
+        <div class="tbl-wrap"><table class="data-tbl" id="fsVarBSTable" style="min-width:600px"></table></div>
+        <div style="margin-top:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">Income Statement Variance</div>
+          <div class="tbl-wrap"><table class="data-tbl" id="fsVarISTable" style="min-width:600px"></table></div>
+        </div>
+        <div style="margin-top:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">P&amp;L Metrics Variance</div>
+          <div class="tbl-wrap"><table class="data-tbl" id="fsVarKpiTable" style="min-width:600px"></table></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ===== PORTFOLIO (COMPANY METRICS) TAB ===== -->
@@ -762,78 +816,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="section">
       <div class="section-hdr"><span class="section-title">Default &amp; Collection Breakdown by Status</span></div>
       <div class="tbl-wrap"><table class="data-tbl" id="recDefaultTable"></table></div>
-    </div>
-  </div>
-
-  <!-- ===== FS SUMMARY TAB ===== -->
-  <div id="tab-fssummary" class="tab-content">
-    <!-- Period selector -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:11px;color:var(--muted);font-weight:600">Period:</label>
-        <select id="fsPeriodSel" onchange="buildFSSummary(getFilteredDeals())"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="fsSaveEdits()" style="font-size:11px">💾 Save Edits</button>
-      <span style="font-size:11px;color:var(--muted)">Enter Balance Sheet &amp; Income Statement data; Portfolio Metrics are auto-calculated from deal uploads.</span>
-    </div>
-
-    <!-- Balance Sheet -->
-    <div class="section" style="margin-bottom:14px">
-      <div class="section-hdr"><span class="section-title">Balance Sheet</span><span class="section-sub" id="fsBSPeriod"></span></div>
-      <div class="tbl-wrap"><table class="data-tbl" id="fsBSTable" style="min-width:400px"></table></div>
-    </div>
-
-    <!-- Income Statement -->
-    <div class="section" style="margin-bottom:14px">
-      <div class="section-hdr"><span class="section-title">Income Statement</span><span class="section-sub" id="fsISPeriod"></span></div>
-      <div class="tbl-wrap"><table class="data-tbl" id="fsISTable" style="min-width:400px"></table></div>
-    </div>
-
-    <!-- Portfolio Metrics -->
-    <div class="section">
-      <div class="section-hdr"><span class="section-title">Portfolio Metrics</span><span class="section-sub">Auto-calculated from deal data</span></div>
-      <div class="tbl-wrap"><table class="data-tbl" id="fsPMTable" style="min-width:400px"></table></div>
-    </div>
-  </div>
-
-  <!-- ===== VARIANCE ANALYSIS TAB ===== -->
-  <div id="tab-variance" class="tab-content">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:11px;color:var(--muted);font-weight:600">Current Period:</label>
-        <select id="varCurrSel" onchange="buildVarianceTab(getFilteredDeals())"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:11px;color:var(--muted);font-weight:600">vs. Prior:</label>
-        <select id="varPriorSel" onchange="buildVarianceTab(getFilteredDeals())"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
-      </div>
-    </div>
-
-    <!-- Chart row -->
-    <div class="chart-row" style="margin-bottom:14px">
-      <div class="chart-box">
-        <div class="chart-title">Funded &amp; Collected — Period Comparison</div>
-        <div class="chart-wrap" style="height:220px"><canvas id="varFundedChart"></canvas></div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title">Key Metrics — Period Comparison</div>
-        <div class="chart-wrap" style="height:220px"><canvas id="varMetricsChart"></canvas></div>
-      </div>
-    </div>
-
-    <!-- Portfolio Variance Table -->
-    <div class="section" style="margin-bottom:14px">
-      <div class="section-hdr"><span class="section-title">Portfolio Metrics Variance</span><span class="section-sub" id="varPortSub"></span></div>
-      <div class="tbl-wrap"><table class="data-tbl" id="varPortTable"></table></div>
-    </div>
-
-    <!-- Financial Statement Variance -->
-    <div class="section">
-      <div class="section-hdr"><span class="section-title">Financial Statement Variance</span><span class="section-sub">Based on manually entered FS Summary data</span></div>
-      <div class="tbl-wrap"><table class="data-tbl" id="varFSTable"></table></div>
     </div>
   </div>
 
@@ -2753,8 +2735,7 @@ function buildAllViews(){
   try { buildTimeTab(deals); } catch(e){ console.error('buildTimeTab error:', e); }
   try { buildRecoveryTab(); } catch(e){ console.error('buildRecoveryTab error:', e); }
   try { buildComputedMetrics(deals); } catch(e){ console.error('buildComputedMetrics error:', e); }
-  try { buildFSSummary(deals); } catch(e){ console.error('buildFSSummary error:', e); }
-  try { buildVarianceTab(deals); } catch(e){ console.error('buildVarianceTab error:', e); }
+  try { buildFSWorkbookSections(); } catch(e){ console.error('buildFSWorkbookSections error:', e); }
   // Pass the already-filtered dataset directly — single source of truth
   buildHistPerfTable(deals);
   buildEntityList();
@@ -3844,327 +3825,303 @@ function buildDimensionTab(deals){
 }
 
 // ============================================================
-// FS SUMMARY TAB
+// FS WORKBOOK DATA + DASHBOARD SECTIONS
 // ============================================================
-const FS_BALANCE_SHEET = [
-  // [key, label, indent, isTotal, formula(d)→value]
-  // format: {key, label, indent:0-3, type:'header'|'item'|'subtotal'|'total', calc:null|fn}
-  {key:'_hdr_assets',        label:'Assets',                         type:'header'},
-  {key:'_hdr_ca',            label:'Current Assets',                 type:'header', indent:1},
-  {key:'cash',               label:'Cash and Cash Equivalents',      type:'item',   indent:2},
-  {key:'ar',                 label:'Accounts Receivable',            type:'item',   indent:2},
-  {key:'other_ca',           label:'Other Current Assets',           type:'item',   indent:2},
-  {key:'total_ca',           label:'Total Current Assets',           type:'subtotal',indent:2, calc:d=>n(d,'cash')+n(d,'ar')+n(d,'other_ca')},
-  {key:'lt_assets',          label:'Long Term Assets',               type:'item',   indent:2},
-  {key:'fixed_assets',       label:'Fixed Assets',                   type:'item',   indent:2},
-  {key:'total_nca',          label:'Total Non-Current Assets',       type:'subtotal',indent:2, calc:d=>n(d,'lt_assets')+n(d,'fixed_assets')},
-  {key:'total_assets',       label:'Total Assets',                   type:'total',  indent:1, calc:d=>n(d,'total_ca')+n(d,'total_nca')},
-  {key:'_hdr_liab',          label:'Liabilities',                    type:'header'},
-  {key:'accrued_exp',        label:'Accrued Expenses',               type:'item',   indent:2},
-  {key:'synd_payable',       label:'Syndicate Partners Payable',     type:'item',   indent:2},
-  {key:'iso_payable',        label:'ISO Commissions Payable',        type:'item',   indent:2},
-  {key:'deferred_income',    label:'Deferred Income',                type:'item',   indent:2},
-  {key:'credit_card',        label:'Credit Card',                    type:'item',   indent:2},
-  {key:'total_cc',           label:'Total for Credit Cards',         type:'subtotal',indent:2, calc:d=>n(d,'credit_card')},
-  {key:'other_cl',           label:'Other Current Liabilities',      type:'item',   indent:2},
-  {key:'total_ocl',          label:'Total Other Current Liabilities', type:'subtotal',indent:2,calc:d=>n(d,'other_cl')},
-  {key:'total_cl',           label:'Total Current Liabilities',      type:'subtotal',indent:2, calc:d=>n(d,'accrued_exp')+n(d,'synd_payable')+n(d,'iso_payable')+n(d,'deferred_income')+n(d,'total_cc')+n(d,'total_ocl')},
-  {key:'lt_liab',            label:'Long Term Liabilities',          type:'item',   indent:2},
-  {key:'total_ncl',          label:'Total Non-Current Liabilities',  type:'subtotal',indent:2, calc:d=>n(d,'lt_liab')},
-  {key:'total_liab',         label:'Total Liabilities',              type:'total',  indent:1, calc:d=>n(d,'total_cl')+n(d,'total_ncl')},
-  {key:'_hdr_equity',        label:'Equity',                         type:'header'},
-  {key:'distribution',       label:'Distribution',                   type:'item',   indent:2},
-  {key:'opening_equity',     label:'Opening Balance Equity',         type:'item',   indent:2},
-  {key:'retained_earnings',  label:'Retained Earnings',              type:'item',   indent:2},
-  {key:'net_income_bs',      label:'Net Income',                     type:'item',   indent:2},
-  {key:'total_equity',       label:'Total Equity',                   type:'subtotal',indent:2, calc:d=>n(d,'distribution')+n(d,'opening_equity')+n(d,'retained_earnings')+n(d,'net_income_bs')},
-  {key:'total_liab_equity',  label:'Total Liabilities and Equity',   type:'total',  indent:1, calc:d=>n(d,'total_equity')+n(d,'total_liab')},
-];
+const FS_WORKBOOK_DATA = {"2024-01":{"cash":-571939.33,"ar":1856440.24,"other_ca":0,"total_ca":1284500.91,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":1284500.91,"accrued_exp":0,"synd_payable":2154565.07,"iso_payable":162876.14,"deferred_income":0.49,"credit_card":0,"total_cc":0,"other_cl":0,"total_ocl":0,"total_cl":2317441.7,"lt_liab":0,"total_ncl":0,"total_liab":2317441.7,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":-1035355.79,"total_equity":-1032940.79,"total_liab_equity":1284500.91,"orig_income":835,"coll_fee_income":0,"monthly_fee_income":497,"comm_fee_income":0,"default_fee_income":0,"mgmt_fee_income":623.35,"total_income":1955.35,"comm_exp":0,"other_cogs":0,"total_cogs":0,"gross_profit":1955.35,"gross_margin_pct":1,"bank_fees":835,"office_exp":1072500,"software_exp":0,"payroll_total":0,"prof_fees":0,"sales_mktg":0,"insurance":0,"travel":0,"utilities":0,"rent":0,"total_opex":1073335,"exp_pct_rev":548.922188,"ebitda":-1071379.65,"other_income":0,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":-1071379.65,"net_income_pct":-547.922188,"growth":0,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.00043,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0,"kpi_mgmt_pct_funded":0.00054,"total_income_pct_funded":0.00097,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.007162,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0,"kpi_mgmt_pct_coll":0.008983,"total_income_pct_coll":0.016145,"kpi_comm_exp_pct_funded":0,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0,"kpi_bankfees_pct_funded":0.000723,"kpi_office_pct_funded":0.928571,"kpi_software_pct_funded":0,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0,"total_exp_pct_funded":0.929294,"net_income_pct_funded":-0.927601,"kpi_bankfees_pct_orig":1,"kpi_office_pct_orig":1284.431138,"kpi_software_pct_orig":0,"kpi_proffees_pct_orig":0,"kpi_sales_pct_orig":0,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0,"total_exp_pct_orig":1285.431138,"kpi_bankfees_pct_rev":0.427034,"kpi_office_pct_rev":548.495154,"kpi_software_pct_rev":0,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":69392.47,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0,"total_exp_pct_rev":69947.222588,"mgmt_coll_total":1671199.51,"mgmt_coll_ach_deal":1671199.51,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":56062.25,"mgmt_coll_wire":13678,"mgmt_coll_mca":0,"mgmt_coll_other":0,"mgmt_total_fees":18928.1196,"mgmt_fee_pct":0.011326},"2024-02":{"cash":-293135.79,"ar":2371931.84,"other_ca":0,"total_ca":2078796.05,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":2078796.05,"accrued_exp":0,"synd_payable":3268836.42,"iso_payable":173335.69,"deferred_income":0.49,"credit_card":0,"total_cc":0,"other_cl":-1426481.5,"total_ocl":-1426481.5,"total_cl":2015691.1,"lt_liab":0,"total_ncl":0,"total_liab":2015691.1,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":60689.95,"total_equity":63104.95,"total_liab_equity":2078796.05,"orig_income":16310.45,"coll_fee_income":0,"monthly_fee_income":1294,"comm_fee_income":0,"default_fee_income":700,"mgmt_fee_income":5223.57,"total_income":23528.02,"comm_exp":-968.41,"other_cogs":0,"total_cogs":-968.41,"gross_profit":24496.43,"gross_margin_pct":1.04116,"bank_fees":954.8,"office_exp":-1072500,"software_exp":0,"payroll_total":0,"prof_fees":0,"sales_mktg":0,"insurance":0,"travel":0,"utilities":0,"rent":0,"total_opex":-1071545.2,"exp_pct_rev":-45.543365,"ebitda":1096041.63,"other_income":4.11,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":1096045.74,"net_income_pct":46.584699,"growth":-2.023023,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001721,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.000931,"kpi_mgmt_pct_funded":0.006946,"total_income_pct_funded":0.009598,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.00277,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.001499,"kpi_mgmt_pct_coll":0.011184,"total_income_pct_coll":0.015453,"kpi_comm_exp_pct_funded":-0.001288,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":-0.001288,"kpi_bankfees_pct_funded":0.00127,"kpi_office_pct_funded":-1.426197,"kpi_software_pct_funded":0,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0,"total_exp_pct_funded":-1.424927,"net_income_pct_funded":1.457508,"kpi_bankfees_pct_orig":0.058539,"kpi_office_pct_orig":-65.75539,"kpi_software_pct_orig":0,"kpi_proffees_pct_orig":0,"kpi_sales_pct_orig":0,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0,"total_exp_pct_orig":-65.696851,"kpi_bankfees_pct_rev":0.040581,"kpi_office_pct_rev":-45.583946,"kpi_software_pct_rev":0,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":0,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0,"total_exp_pct_rev":-45.543365,"mgmt_coll_total":992733.35,"mgmt_coll_ach_deal":992733.35,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":397848.65,"mgmt_coll_wire":55282.51,"mgmt_coll_mca":26119.99,"mgmt_coll_other":0,"mgmt_total_fees":12626.4393,"mgmt_fee_pct":0.012719},"2024-03":{"cash":856338.76,"ar":4923006.2,"other_ca":0,"total_ca":5779344.96,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":5779344.96,"accrued_exp":0,"synd_payable":5262660.29,"iso_payable":301531.15,"deferred_income":0.46,"credit_card":0,"total_cc":0,"other_cl":74943.12,"total_ocl":74943.12,"total_cl":5639135.02,"lt_liab":0,"total_ncl":0,"total_liab":5639135.02,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":137794.94,"total_equity":140209.94,"total_liab_equity":5779344.96,"orig_income":53943.29,"coll_fee_income":0,"monthly_fee_income":3933,"comm_fee_income":15000,"default_fee_income":3536.36,"mgmt_fee_income":11087.04,"total_income":87499.69,"comm_exp":0,"other_cogs":0,"total_cogs":0,"gross_profit":87499.69,"gross_margin_pct":1,"bank_fees":10404.98,"office_exp":0,"software_exp":0,"payroll_total":0,"prof_fees":0,"sales_mktg":0,"insurance":0,"travel":0,"utilities":0,"rent":0,"total_opex":10404.98,"exp_pct_rev":0.118914,"ebitda":77094.71,"other_income":10.28,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":77104.99,"net_income_pct":0.881203,"growth":-0.929652,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001678,"kpi_comm_fee_pct_funded":0.006399,"kpi_default_pct_funded":0.001509,"kpi_mgmt_pct_funded":0.00473,"total_income_pct_funded":0.014316,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.004567,"kpi_comm_fee_pct_coll":0.01742,"kpi_default_pct_coll":0.004107,"kpi_mgmt_pct_coll":0.012876,"total_income_pct_coll":0.038969,"kpi_comm_exp_pct_funded":0,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0,"kpi_bankfees_pct_funded":0.004439,"kpi_office_pct_funded":0,"kpi_software_pct_funded":0,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0,"total_exp_pct_funded":0.004439,"net_income_pct_funded":0.032895,"kpi_bankfees_pct_orig":0.192887,"kpi_office_pct_orig":0,"kpi_software_pct_orig":0,"kpi_proffees_pct_orig":0,"kpi_sales_pct_orig":0,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0,"total_exp_pct_orig":0.192887,"kpi_bankfees_pct_rev":0.118914,"kpi_office_pct_rev":0,"kpi_software_pct_rev":0,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":0,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0,"total_exp_pct_rev":0.118914,"mgmt_coll_total":2975924.14,"mgmt_coll_ach_deal":2975924.14,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":714998.36,"mgmt_coll_wire":66713.31,"mgmt_coll_mca":86897.5,"mgmt_coll_other":0,"mgmt_total_fees":39942.7702,"mgmt_fee_pct":0.013422},"2024-04":{"cash":2126813.59,"ar":8159779.64,"other_ca":0,"total_ca":10286593.23,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":10286593.23,"accrued_exp":0,"synd_payable":9731689.17,"iso_payable":329775.66,"deferred_income":29940.42,"credit_card":0,"total_cc":0,"other_cl":1554.44,"total_ocl":1554.44,"total_cl":10092959.69,"lt_liab":0,"total_ncl":0,"total_liab":10092959.69,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":191218.54,"total_equity":193633.54,"total_liab_equity":10286593.23,"orig_income":39134.21,"coll_fee_income":0,"monthly_fee_income":6074,"comm_fee_income":0,"default_fee_income":250,"mgmt_fee_income":21086.88,"total_income":66545.09,"comm_exp":9599.96,"other_cogs":0,"total_cogs":9599.96,"gross_profit":56945.13,"gross_margin_pct":0.855738,"bank_fees":3522.07,"office_exp":0,"software_exp":0,"payroll_total":0,"prof_fees":0,"sales_mktg":0,"insurance":0,"travel":0,"utilities":0,"rent":0,"total_opex":3522.07,"exp_pct_rev":0.052928,"ebitda":53423.06,"other_income":0.54,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":53423.6,"net_income_pct":0.802818,"growth":-0.307132,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001771,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":7.3e-05,"kpi_mgmt_pct_funded":0.006148,"total_income_pct_funded":0.007992,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.003544,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.000146,"kpi_mgmt_pct_coll":0.012303,"total_income_pct_coll":0.015993,"kpi_comm_exp_pct_funded":0.002799,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.002799,"kpi_bankfees_pct_funded":0.001027,"kpi_office_pct_funded":0,"kpi_software_pct_funded":0,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0,"total_exp_pct_funded":0.001027,"net_income_pct_funded":0.015575,"kpi_bankfees_pct_orig":0.09,"kpi_office_pct_orig":0,"kpi_software_pct_orig":0,"kpi_proffees_pct_orig":0,"kpi_sales_pct_orig":0,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0,"total_exp_pct_orig":0.09,"kpi_bankfees_pct_rev":0.052928,"kpi_office_pct_rev":0,"kpi_software_pct_rev":0,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":0,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0,"total_exp_pct_rev":0.052928,"mgmt_coll_total":3845123.21,"mgmt_coll_ach_deal":3845123.21,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":983619.47,"mgmt_coll_wire":727568.6,"mgmt_coll_mca":49961.81,"mgmt_coll_other":0,"mgmt_total_fees":52501.2644,"mgmt_fee_pct":0.013654},"2024-05":{"cash":1950882.67,"ar":14528479.37,"other_ca":0,"total_ca":16479362.04,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":16479362.04,"accrued_exp":0,"synd_payable":15859127.61,"iso_payable":261332.93,"deferred_income":0.37,"credit_card":1563.26,"total_cc":1563.26,"other_cl":50802.89,"total_ocl":50802.89,"total_cl":16172827.06,"lt_liab":0,"total_ncl":0,"total_liab":16172827.06,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":304119.98,"total_equity":306534.98,"total_liab_equity":16479362.04,"orig_income":58203.98,"coll_fee_income":0,"monthly_fee_income":7966,"comm_fee_income":0,"default_fee_income":12249.93,"mgmt_fee_income":36243.42,"total_income":114663.33,"comm_exp":-9600,"other_cogs":0,"total_cogs":-9600,"gross_profit":124263.33,"gross_margin_pct":1.083723,"bank_fees":9798.63,"office_exp":0,"software_exp":0,"payroll_total":0,"prof_fees":0,"sales_mktg":0,"insurance":0,"travel":0,"utilities":0,"rent":1563.26,"total_opex":11361.89,"exp_pct_rev":0.099089,"ebitda":112901.44,"other_income":0,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":112901.44,"net_income_pct":0.984634,"growth":1.113325,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001244,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.001913,"kpi_mgmt_pct_funded":0.005661,"total_income_pct_funded":0.008818,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.003167,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.00487,"kpi_mgmt_pct_coll":0.014408,"total_income_pct_coll":0.022444,"kpi_comm_exp_pct_funded":-0.001499,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":-0.001499,"kpi_bankfees_pct_funded":0.00153,"kpi_office_pct_funded":0,"kpi_software_pct_funded":0,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.000244,"total_exp_pct_funded":0.001775,"net_income_pct_funded":0.017634,"kpi_bankfees_pct_orig":0.16835,"kpi_office_pct_orig":0,"kpi_software_pct_orig":0,"kpi_proffees_pct_orig":0,"kpi_sales_pct_orig":0,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0.026858,"total_exp_pct_orig":0.195208,"kpi_bankfees_pct_rev":0.085456,"kpi_office_pct_rev":0,"kpi_software_pct_rev":0,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":0,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0.013633,"total_exp_pct_rev":0.099089,"mgmt_coll_total":7914359.7,"mgmt_coll_ach_deal":7914359.7,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":1686698.88,"mgmt_coll_wire":777331.01,"mgmt_coll_mca":109490,"mgmt_coll_other":0,"mgmt_total_fees":109771.1958,"mgmt_fee_pct":0.01387},"2024-06":{"cash":2689880.09,"ar":17874884,"other_ca":0,"total_ca":20564764.09,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":20564764.09,"accrued_exp":0,"synd_payable":19744444.88,"iso_payable":293577.12,"deferred_income":0.4,"credit_card":5926.31,"total_cc":5926.31,"other_cl":84945.9,"total_ocl":84945.9,"total_cl":20128894.61,"lt_liab":0,"total_ncl":0,"total_liab":20128894.61,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":433454.48,"total_equity":435869.48,"total_liab_equity":20564764.09,"orig_income":85429.31,"coll_fee_income":0,"monthly_fee_income":13941,"comm_fee_income":0,"default_fee_income":500,"mgmt_fee_income":70371.52,"total_income":170241.83,"comm_exp":0.02,"other_cogs":0,"total_cogs":0.02,"gross_profit":170241.81,"gross_margin_pct":1.0,"bank_fees":9926.78,"office_exp":0,"software_exp":3266.25,"payroll_total":0,"prof_fees":1500,"sales_mktg":17321.63,"insurance":0,"travel":0,"utilities":0,"rent":502.65,"total_opex":32517.31,"exp_pct_rev":0.191007,"ebitda":137724.5,"other_income":0,"other_exp":0,"rd_exp":0,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":137724.5,"net_income_pct":0.808993,"growth":0.219865,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.00252,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":9e-05,"kpi_mgmt_pct_funded":0.012721,"total_income_pct_funded":0.015332,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.003123,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.000112,"kpi_mgmt_pct_coll":0.015764,"total_income_pct_coll":0.018999,"kpi_comm_exp_pct_funded":0.0,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.0,"kpi_bankfees_pct_funded":0.001795,"kpi_office_pct_funded":0,"kpi_software_pct_funded":0.00059,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.000271,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":9.1e-05,"total_exp_pct_funded":0.002747,"net_income_pct_funded":0.024897,"kpi_bankfees_pct_orig":0.116199,"kpi_office_pct_orig":0,"kpi_software_pct_orig":0.038233,"kpi_proffees_pct_orig":0.017558,"kpi_sales_pct_orig":0.20276,"kpi_travel_pct_orig":0,"kpi_rent_pct_orig":0.005884,"total_exp_pct_orig":0.380634,"kpi_bankfees_pct_rev":0.05831,"kpi_office_pct_rev":0,"kpi_software_pct_rev":0.019186,"kpi_proffees_pct_rev":0.008811,"kpi_sales_pct_rev":0.101747,"kpi_travel_pct_rev":0,"kpi_rent_pct_rev":0.002953,"total_exp_pct_rev":0.191007,"mgmt_coll_total":6149156.3,"mgmt_coll_ach_deal":6149156.3,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":1906741.1,"mgmt_coll_wire":1596262.36,"mgmt_coll_mca":947087.79,"mgmt_coll_other":0,"mgmt_total_fees":91011.4012,"mgmt_fee_pct":0.014801},"2024-07":{"cash":4269100.65,"ar":19550069.6,"other_ca":0,"total_ca":23819170.25,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":23819170.25,"accrued_exp":0,"synd_payable":22816888.7,"iso_payable":496521.22,"deferred_income":0.4,"credit_card":11616.04,"total_cc":11616.04,"other_cl":41568.45,"total_ocl":41568.45,"total_cl":23366594.81,"lt_liab":0,"total_ncl":0,"total_liab":23366594.81,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":450160.44,"total_equity":452575.44,"total_liab_equity":23819170.25,"orig_income":60665.85,"coll_fee_income":1000,"monthly_fee_income":12746,"comm_fee_income":0,"default_fee_income":5692.18,"mgmt_fee_income":65796.51,"total_income":145900.54,"comm_exp":3723.35,"other_cogs":0,"total_cogs":3723.35,"gross_profit":142177.19,"gross_margin_pct":0.97448,"bank_fees":41763.07,"office_exp":0,"software_exp":18831.26,"payroll_total":0,"prof_fees":4749.97,"sales_mktg":687.87,"insurance":0,"travel":255,"utilities":0,"rent":545.19,"total_opex":66832.36,"exp_pct_rev":0.458068,"ebitda":75344.83,"other_income":-14.93,"other_exp":2750,"rd_exp":9918.94,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":62660.96,"net_income_pct":0.429477,"growth":-0.545027,"kpi_coll_fee_pct_funded":0.000225,"kpi_monthly_pct_funded":0.002868,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.001281,"kpi_mgmt_pct_funded":0.014806,"total_income_pct_funded":0.01918,"kpi_coll_fee_pct_coll":0.00021,"kpi_monthly_pct_coll":0.002673,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.001194,"kpi_mgmt_pct_coll":0.013798,"total_income_pct_coll":0.017874,"kpi_comm_exp_pct_funded":0.000838,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.000838,"kpi_bankfees_pct_funded":0.009398,"kpi_office_pct_funded":0,"kpi_software_pct_funded":0.004237,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.001069,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.000123,"total_exp_pct_funded":0.014827,"net_income_pct_funded":0.0141,"kpi_bankfees_pct_orig":0.688412,"kpi_office_pct_orig":0,"kpi_software_pct_orig":0.31041,"kpi_proffees_pct_orig":0.078297,"kpi_sales_pct_orig":0.011339,"kpi_travel_pct_orig":0.004203,"kpi_rent_pct_orig":0.008987,"total_exp_pct_orig":1.101647,"kpi_bankfees_pct_rev":0.286243,"kpi_office_pct_rev":0,"kpi_software_pct_rev":0.129069,"kpi_proffees_pct_rev":0.032556,"kpi_sales_pct_rev":0.004715,"kpi_travel_pct_rev":0.001748,"kpi_rent_pct_rev":0.003737,"total_exp_pct_rev":0.458068,"mgmt_coll_total":4771465.46,"mgmt_coll_ach_deal":4771465.46,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":1407873.55,"mgmt_coll_wire":3335573.38,"mgmt_coll_mca":97180.48,"mgmt_coll_other":0,"mgmt_total_fees":72941.4041,"mgmt_fee_pct":0.015287},"2024-08":{"cash":3633507.34,"ar":26785099.77,"other_ca":0,"total_ca":30418607.11,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":30418607.11,"accrued_exp":0,"synd_payable":28320386.7,"iso_payable":730247.88,"deferred_income":0.39,"credit_card":22931.79,"total_cc":22931.79,"other_cl":677572.94,"total_ocl":677572.94,"total_cl":29751139.7,"lt_liab":0,"total_ncl":0,"total_liab":29751139.7,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":665052.41,"total_equity":667467.41,"total_liab_equity":30418607.11,"orig_income":197726.71,"coll_fee_income":5,"monthly_fee_income":17277,"comm_fee_income":0,"default_fee_income":63042.5,"mgmt_fee_income":77868.96,"total_income":355920.17,"comm_exp":500,"other_cogs":0,"total_cogs":500,"gross_profit":355420.17,"gross_margin_pct":0.998595,"bank_fees":9016.87,"office_exp":2840.85,"software_exp":6829.9,"payroll_total":0,"prof_fees":26499.99,"sales_mktg":15738.98,"insurance":0,"travel":21809.88,"utilities":0,"rent":545.19,"total_opex":83281.66,"exp_pct_rev":0.23399,"ebitda":272138.51,"other_income":0,"other_exp":5598,"rd_exp":7018.16,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":259522.35,"net_income_pct":0.729159,"growth":3.141691,"kpi_coll_fee_pct_funded":1e-06,"kpi_monthly_pct_funded":0.00194,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.007078,"kpi_mgmt_pct_funded":0.008742,"total_income_pct_funded":0.01776,"kpi_coll_fee_pct_coll":1e-06,"kpi_monthly_pct_coll":0.002822,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.010296,"kpi_mgmt_pct_coll":0.012718,"total_income_pct_coll":0.025836,"kpi_comm_exp_pct_funded":5.6e-05,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":5.6e-05,"kpi_bankfees_pct_funded":0.001012,"kpi_office_pct_funded":0.000319,"kpi_software_pct_funded":0.000767,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.002975,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":6.1e-05,"total_exp_pct_funded":0.005134,"net_income_pct_funded":0.029136,"kpi_bankfees_pct_orig":0.045603,"kpi_office_pct_orig":0.014368,"kpi_software_pct_orig":0.034542,"kpi_proffees_pct_orig":0.134023,"kpi_sales_pct_orig":0.0796,"kpi_travel_pct_orig":0.110303,"kpi_rent_pct_orig":0.002757,"total_exp_pct_orig":0.421196,"kpi_bankfees_pct_rev":0.025334,"kpi_office_pct_rev":0.007982,"kpi_software_pct_rev":0.019189,"kpi_proffees_pct_rev":0.074455,"kpi_sales_pct_rev":0.044221,"kpi_travel_pct_rev":0.061277,"kpi_rent_pct_rev":0.001532,"total_exp_pct_rev":0.23399,"mgmt_coll_total":11070209.4,"mgmt_coll_ach_deal":11007220.6,"mgmt_coll_asset":0,"mgmt_coll_rev_con":62988.8,"mgmt_coll_ach":2222748.37,"mgmt_coll_wire":3072801.35,"mgmt_coll_mca":576741.72,"mgmt_coll_other":0,"mgmt_total_fees":160722.314,"mgmt_fee_pct":0.014518},"2024-09":{"cash":2891358.84,"ar":36996897.9,"other_ca":221248.5,"total_ca":40109505.24,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":40109505.24,"accrued_exp":0,"synd_payable":37969366.81,"iso_payable":648774.34,"deferred_income":0.45,"credit_card":23011.95,"total_cc":23011.95,"other_cl":644563.37,"total_ocl":644563.37,"total_cl":39285716.92,"lt_liab":0,"total_ncl":0,"total_liab":39285716.92,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":821373.32,"total_equity":823788.32,"total_liab_equity":40109505.24,"orig_income":197769.89,"coll_fee_income":0,"monthly_fee_income":20865,"comm_fee_income":0,"default_fee_income":2200,"mgmt_fee_income":101615.8,"total_income":322450.69,"comm_exp":2890.04,"other_cogs":0,"total_cogs":2890.04,"gross_profit":319560.65,"gross_margin_pct":0.991037,"bank_fees":29409.91,"office_exp":883.63,"software_exp":19284.52,"payroll_total":0,"prof_fees":14074.23,"sales_mktg":1036.67,"insurance":0,"travel":27956.08,"utilities":0,"rent":545.19,"total_opex":93190.23,"exp_pct_rev":0.289006,"ebitda":226370.42,"other_income":0,"other_exp":5000,"rd_exp":4763.2,"interest_exp":0,"depreciation":0,"taxes":337.86,"net_income":216269.36,"net_income_pct":0.670705,"growth":-0.166664,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001707,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.00018,"kpi_mgmt_pct_funded":0.008312,"total_income_pct_funded":0.010199,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.002897,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.000306,"kpi_mgmt_pct_coll":0.014111,"total_income_pct_coll":0.017314,"kpi_comm_exp_pct_funded":0.000236,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.000236,"kpi_bankfees_pct_funded":0.002406,"kpi_office_pct_funded":7.2e-05,"kpi_software_pct_funded":0.001577,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.001151,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":4.5e-05,"total_exp_pct_funded":0.005251,"net_income_pct_funded":0.01769,"kpi_bankfees_pct_orig":0.148708,"kpi_office_pct_orig":0.004468,"kpi_software_pct_orig":0.09751,"kpi_proffees_pct_orig":0.071165,"kpi_sales_pct_orig":0.005242,"kpi_travel_pct_orig":0.141357,"kpi_rent_pct_orig":0.002757,"total_exp_pct_orig":0.471205,"kpi_bankfees_pct_rev":0.091207,"kpi_office_pct_rev":0.00274,"kpi_software_pct_rev":0.059806,"kpi_proffees_pct_rev":0.043648,"kpi_sales_pct_rev":0.003215,"kpi_travel_pct_rev":0.086699,"kpi_rent_pct_rev":0.001691,"total_exp_pct_rev":0.289006,"mgmt_coll_total":13447553.92,"mgmt_coll_ach_deal":13429608.72,"mgmt_coll_asset":0,"mgmt_coll_rev_con":17945.2,"mgmt_coll_ach":3282178.85,"mgmt_coll_wire":1734013.78,"mgmt_coll_mca":2220697.65,"mgmt_coll_other":0,"mgmt_total_fees":177637.24295,"mgmt_fee_pct":0.01321},"2024-10":{"cash":3533415.96,"ar":41721624.99,"other_ca":90000,"total_ca":45345040.95,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":45345040.95,"accrued_exp":0,"synd_payable":43761338.13,"iso_payable":582875.72,"deferred_income":0.42,"credit_card":34886.84,"total_cc":34886.84,"other_cl":94951.09,"total_ocl":94951.09,"total_cl":44474052.2,"lt_liab":0,"total_ncl":0,"total_liab":44474052.2,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":868573.75,"total_equity":870988.75,"total_liab_equity":45345040.95,"orig_income":150146.81,"coll_fee_income":0,"monthly_fee_income":25146,"comm_fee_income":0,"default_fee_income":350,"mgmt_fee_income":122968.26,"total_income":298611.07,"comm_exp":6824.11,"other_cogs":0,"total_cogs":6824.11,"gross_profit":291786.96,"gross_margin_pct":0.977147,"bank_fees":49148.5,"office_exp":1217.5,"software_exp":16131.28,"payroll_total":0,"prof_fees":2785.99,"sales_mktg":32254.55,"insurance":0,"travel":24395.92,"utilities":0,"rent":37473.96,"total_opex":163407.7,"exp_pct_rev":0.547226,"ebitda":128379.26,"other_income":0,"other_exp":24000,"rd_exp":14178.07,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":90201.19,"net_income_pct":0.302069,"growth":-0.582922,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.002328,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":3.2e-05,"kpi_mgmt_pct_funded":0.011382,"total_income_pct_funded":0.013742,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.00262,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":3.6e-05,"kpi_mgmt_pct_coll":0.012811,"total_income_pct_coll":0.015467,"kpi_comm_exp_pct_funded":0.000632,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.000632,"kpi_bankfees_pct_funded":0.004549,"kpi_office_pct_funded":0.000113,"kpi_software_pct_funded":0.001493,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.000258,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.003469,"total_exp_pct_funded":0.009882,"net_income_pct_funded":0.008349,"kpi_bankfees_pct_orig":0.327336,"kpi_office_pct_orig":0.008109,"kpi_software_pct_orig":0.107437,"kpi_proffees_pct_orig":0.018555,"kpi_sales_pct_orig":0.21482,"kpi_travel_pct_orig":0.16248,"kpi_rent_pct_orig":0.249582,"total_exp_pct_orig":1.088319,"kpi_bankfees_pct_rev":0.16459,"kpi_office_pct_rev":0.004077,"kpi_software_pct_rev":0.054021,"kpi_proffees_pct_rev":0.00933,"kpi_sales_pct_rev":0.108015,"kpi_travel_pct_rev":0.081698,"kpi_rent_pct_rev":0.125494,"total_exp_pct_rev":0.547226,"mgmt_coll_total":11940559.41,"mgmt_coll_ach_deal":11730559.41,"mgmt_coll_asset":210000,"mgmt_coll_rev_con":0,"mgmt_coll_ach":5459399.42,"mgmt_coll_wire":3543478.88,"mgmt_coll_mca":557825.69,"mgmt_coll_other":-17945.2,"mgmt_total_fees":159819.7538,"mgmt_fee_pct":0.013385},"2024-11":{"cash":5095708.88,"ar":41999736.7,"other_ca":72000,"total_ca":47167445.58,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":47167445.58,"accrued_exp":0,"synd_payable":45328958.29,"iso_payable":612237.5,"deferred_income":0.4,"credit_card":27814.8,"total_cc":27814.8,"other_cl":219658.47,"total_ocl":219658.47,"total_cl":46188669.46,"lt_liab":0,"total_ncl":0,"total_liab":46188669.46,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":976361.12,"total_equity":978776.12,"total_liab_equity":47167445.58,"orig_income":101722.72,"coll_fee_income":0,"monthly_fee_income":25748,"comm_fee_income":0,"default_fee_income":15060.95,"mgmt_fee_income":114088.23,"total_income":256619.9,"comm_exp":5637.56,"other_cogs":0,"total_cogs":5637.56,"gross_profit":250982.34,"gross_margin_pct":0.978031,"bank_fees":9512.44,"office_exp":3635.22,"software_exp":16244.94,"payroll_total":0,"prof_fees":215627.97,"sales_mktg":6542.82,"insurance":0,"travel":8225.15,"utilities":0,"rent":44562.19,"total_opex":304350.73,"exp_pct_rev":1.185998,"ebitda":-53368.39,"other_income":0,"other_exp":0,"rd_exp":7467.5,"interest_exp":0,"depreciation":0,"taxes":0,"net_income":-60835.89,"net_income_pct":-0.237066,"growth":-1.674447,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.003812,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.00223,"kpi_mgmt_pct_funded":0.016889,"total_income_pct_funded":0.022931,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.002923,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.00171,"kpi_mgmt_pct_coll":0.012952,"total_income_pct_coll":0.017585,"kpi_comm_exp_pct_funded":0.000835,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.000835,"kpi_bankfees_pct_funded":0.001408,"kpi_office_pct_funded":0.000538,"kpi_software_pct_funded":0.002405,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.031921,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.006597,"total_exp_pct_funded":0.042869,"net_income_pct_funded":-0.009006,"kpi_bankfees_pct_orig":0.093513,"kpi_office_pct_orig":0.035737,"kpi_software_pct_orig":0.159698,"kpi_proffees_pct_orig":2.119762,"kpi_sales_pct_orig":0.06432,"kpi_travel_pct_orig":0.080859,"kpi_rent_pct_orig":0.438075,"total_exp_pct_orig":2.991964,"kpi_bankfees_pct_rev":0.037068,"kpi_office_pct_rev":0.014166,"kpi_software_pct_rev":0.063304,"kpi_proffees_pct_rev":0.840262,"kpi_sales_pct_rev":0.025496,"kpi_travel_pct_rev":0.032052,"kpi_rent_pct_rev":0.173651,"total_exp_pct_rev":1.185998,"mgmt_coll_total":8052179.01,"mgmt_coll_ach_deal":7862429.01,"mgmt_coll_asset":189750,"mgmt_coll_rev_con":0,"mgmt_coll_ach":5879170.17,"mgmt_coll_wire":2095978.93,"mgmt_coll_mca":607614.86,"mgmt_coll_other":0,"mgmt_total_fees":119544.8915,"mgmt_fee_pct":0.014846},"2024-12":{"cash":4184269.08,"ar":48333103.89,"other_ca":54000,"total_ca":52571372.97,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":52571372.97,"accrued_exp":0,"synd_payable":50380894.77,"iso_payable":860995.06,"deferred_income":0.38,"credit_card":61272.5,"total_cc":61272.5,"other_cl":177088.98,"total_ocl":177088.98,"total_cl":51480251.69,"lt_liab":0,"total_ncl":0,"total_liab":51480251.69,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":1088706.28,"total_equity":1091121.28,"total_liab_equity":52571372.97,"orig_income":176800.22,"coll_fee_income":0,"monthly_fee_income":27093,"comm_fee_income":0,"default_fee_income":526553.86,"mgmt_fee_income":179316.42,"total_income":909763.5,"comm_exp":53204.64,"other_cogs":0,"total_cogs":53204.64,"gross_profit":856558.86,"gross_margin_pct":0.941518,"bank_fees":12686.14,"office_exp":33104.38,"software_exp":26385.84,"payroll_total":0,"prof_fees":-68525.17,"sales_mktg":39651.3,"insurance":0,"travel":19856.62,"utilities":0,"rent":18502.65,"total_opex":81661.76,"exp_pct_rev":0.089762,"ebitda":774897.1,"other_income":0,"other_exp":13000,"rd_exp":46028,"interest_exp":0,"depreciation":0,"taxes":6235,"net_income":709634.1,"net_income_pct":0.78002,"growth":-12.664728,"kpi_coll_fee_pct_funded":0,"kpi_monthly_pct_funded":0.001982,"kpi_comm_fee_pct_funded":0,"kpi_default_pct_funded":0.038515,"kpi_mgmt_pct_funded":0.013116,"total_income_pct_funded":0.053612,"kpi_coll_fee_pct_coll":0,"kpi_monthly_pct_coll":0.002155,"kpi_comm_fee_pct_coll":0,"kpi_default_pct_coll":0.041875,"kpi_mgmt_pct_coll":0.01426,"total_income_pct_coll":0.058289,"kpi_comm_exp_pct_funded":0.003892,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.003892,"kpi_bankfees_pct_funded":0.000928,"kpi_office_pct_funded":0.002421,"kpi_software_pct_funded":0.00193,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":-0.005012,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.001353,"total_exp_pct_funded":0.00162,"net_income_pct_funded":0.051906,"kpi_bankfees_pct_orig":0.071754,"kpi_office_pct_orig":0.187242,"kpi_software_pct_orig":0.149241,"kpi_proffees_pct_orig":-0.387585,"kpi_sales_pct_orig":0.224272,"kpi_travel_pct_orig":0.112311,"kpi_rent_pct_orig":0.104653,"total_exp_pct_orig":0.461887,"kpi_bankfees_pct_rev":0.013944,"kpi_office_pct_rev":0.036388,"kpi_software_pct_rev":0.029003,"kpi_proffees_pct_rev":-0.075322,"kpi_sales_pct_rev":0.043584,"kpi_travel_pct_rev":0.021826,"kpi_rent_pct_rev":0.020338,"total_exp_pct_rev":0.089762,"mgmt_coll_total":15479204.42,"mgmt_coll_ach_deal":15479204.42,"mgmt_coll_asset":0,"mgmt_coll_rev_con":0,"mgmt_coll_ach":6493889.99,"mgmt_coll_wire":2088087.2,"mgmt_coll_mca":4752997.6,"mgmt_coll_other":0,"mgmt_total_fees":189353.2855,"mgmt_fee_pct":0.012233},"2024":{"cash":4184269.08,"ar":48333103.89,"other_ca":54000,"total_ca":52571372.97,"lt_assets":0,"fixed_assets":0,"total_nca":0,"total_assets":52571372.97,"accrued_exp":0,"synd_payable":50380894.77,"iso_payable":860995.06,"deferred_income":0.38,"credit_card":61272.5,"total_cc":61272.5,"other_cl":177088.98,"total_ocl":177088.98,"total_cl":51480251.69,"lt_liab":0,"total_ncl":0,"total_liab":51480251.69,"distribution":0,"opening_equity":0,"retained_earnings":2415,"net_income_bs":1088706.28,"total_equity":1091121.28,"total_liab_equity":52571372.97,"orig_income":1138688.44,"coll_fee_income":1005,"monthly_fee_income":162580,"comm_fee_income":15000,"default_fee_income":630135.78,"mgmt_fee_income":806289.96,"total_income":2753699.18,"comm_exp":71811.27,"other_cogs":0,"total_cogs":71811.27,"gross_profit":2681887.91,"gross_margin_pct":0.973922,"bank_fees":186979.19,"office_exp":41681.58,"software_exp":106973.99,"payroll_total":0,"prof_fees":196712.98,"sales_mktg":113233.82,"insurance":0,"travel":102498.65,"utilities":0,"rent":104240.28,"total_opex":852320.49,"exp_pct_rev":0.309518,"ebitda":1829567.42,"other_income":0,"other_exp":50348,"rd_exp":89373.87,"interest_exp":0,"depreciation":0,"taxes":6572.86,"net_income":1683272.69,"net_income_pct":0,"growth":0,"kpi_coll_fee_pct_funded":1.3e-05,"kpi_monthly_pct_funded":0.002127,"kpi_comm_fee_pct_funded":0.000196,"kpi_default_pct_funded":0.008245,"kpi_mgmt_pct_funded":0.010551,"total_income_pct_funded":0.021133,"kpi_coll_fee_pct_coll":1.8e-05,"kpi_monthly_pct_coll":0.003369,"kpi_comm_fee_pct_coll":0.001452,"kpi_default_pct_coll":0.005512,"kpi_mgmt_pct_coll":0.013014,"total_income_pct_coll":0.023364,"kpi_comm_exp_pct_funded":0.00094,"kpi_other_cogs_pct_funded":0,"total_cogs_pct_funded":0.00094,"kpi_bankfees_pct_funded":0.002447,"kpi_office_pct_funded":0.000545,"kpi_software_pct_funded":0.0014,"kpi_payroll_pct_funded":0,"kpi_proffees_pct_funded":0.002574,"kpi_sales_pct_funded":0,"kpi_rent_pct_funded":0.001364,"total_exp_pct_funded":0.00833,"net_income_pct_funded":0.022026,"kpi_bankfees_pct_orig":0.164206,"kpi_office_pct_orig":0.036605,"kpi_software_pct_orig":0.093945,"kpi_proffees_pct_orig":0.172754,"kpi_sales_pct_orig":0.099442,"kpi_travel_pct_orig":0.090015,"kpi_rent_pct_orig":0.091544,"total_exp_pct_orig":0.748511,"kpi_bankfees_pct_rev":0.067901,"kpi_office_pct_rev":0.015137,"kpi_software_pct_rev":0.038847,"kpi_proffees_pct_rev":0,"kpi_sales_pct_rev":0.041121,"kpi_travel_pct_rev":0.037222,"kpi_rent_pct_rev":0.037855,"total_exp_pct_rev":0.309518,"mgmt_coll_total":88309667.83,"mgmt_coll_ach_deal":87828983.83,"mgmt_coll_asset":399750,"mgmt_coll_rev_con":80934,"mgmt_coll_ach":30491229.06,"mgmt_coll_wire":19106769.31,"mgmt_coll_mca":10032615.09,"mgmt_coll_other":-17945.2,"mgmt_total_fees":1204800.08235,"mgmt_fee_pct":0.16327}};
 
-const FS_INCOME_STMT = [
-  {key:'_hdr_income',        label:'Income',                         type:'header'},
-  {key:'advance_income',     label:'Advance Income',                 type:'item',   indent:2},
-  {key:'orig_income',        label:'Origination Income',             type:'item',   indent:2},
-  {key:'coll_fee_income',    label:'Collection Fee Income',          type:'item',   indent:2},
-  {key:'monthly_fee_income', label:'Monthly Fee Income',             type:'item',   indent:2},
-  {key:'comm_fee_income',    label:'Commission Fee Income',          type:'item',   indent:2},
-  {key:'default_fee_income', label:'Default Fee Income',             type:'item',   indent:2},
-  {key:'mgmt_fee_income',    label:'Management Fee Income',          type:'item',   indent:2},
-  {key:'total_income',       label:'Total Income',                   type:'subtotal',indent:1, calc:d=>n(d,'advance_income')+n(d,'orig_income')+n(d,'coll_fee_income')+n(d,'monthly_fee_income')+n(d,'comm_fee_income')+n(d,'default_fee_income')+n(d,'mgmt_fee_income')},
-  {key:'_hdr_cogs',          label:'Cost of Goods Sold',             type:'header'},
-  {key:'comm_exp',           label:'Commission Expenses',            type:'item',   indent:2},
-  {key:'other_cogs',         label:'Other Cost of Goods Sold',       type:'item',   indent:2},
-  {key:'total_cogs',         label:'Total Cost of Goods Sold',       type:'subtotal',indent:1, calc:d=>n(d,'comm_exp')+n(d,'other_cogs')},
-  {key:'gross_profit',       label:'Gross Profit',                   type:'total',  indent:1, calc:d=>n(d,'total_income')-n(d,'total_cogs')},
-  {key:'gross_margin_pct',   label:'Gross Margin %',                 type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'gross_profit')/n(d,'total_income'):0},
-  {key:'_hdr_opex',          label:'Operating Expenses',             type:'header'},
-  {key:'bank_fees',          label:'Bank Fees & Service Charges',    type:'item',   indent:2},
-  {key:'office_exp',         label:'Office Expenses',                type:'item',   indent:2},
-  {key:'software_exp',       label:'Software Expense',               type:'item',   indent:2},
-  {key:'payroll_total',      label:'Total Payroll & Related Expenses',type:'item',  indent:2},
-  {key:'prof_fees',          label:'Professional Fees',              type:'item',   indent:2},
-  {key:'sales_mktg',         label:'Sales & Marketing Expenses',     type:'item',   indent:2},
-  {key:'travel',             label:'Transportation and Travel',       type:'item',   indent:2},
-  {key:'rent',               label:'Rent Expenses',                  type:'item',   indent:2},
-  {key:'total_opex',         label:'Total Operating Expenses',       type:'subtotal',indent:1, calc:d=>n(d,'bank_fees')+n(d,'office_exp')+n(d,'software_exp')+n(d,'payroll_total')+n(d,'prof_fees')+n(d,'sales_mktg')+n(d,'travel')+n(d,'rent')},
-  {key:'exp_pct_rev',        label:'Expenses % of Revenue',          type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'total_opex')/n(d,'total_income'):0},
-  {key:'ebitda',             label:'EBITDA',                         type:'total',  indent:1, calc:d=>n(d,'gross_profit')-n(d,'total_opex')},
-  {key:'_hdr_other',         label:'Below-the-Line',                 type:'header'},
-  {key:'other_income',       label:'Other Income',                   type:'item',   indent:2},
-  {key:'other_exp',          label:'Other Expenses',                 type:'item',   indent:2},
-  {key:'rd_exp',             label:'Research & Development',         type:'item',   indent:2},
-  {key:'interest_exp',       label:'Interest Expense',               type:'item',   indent:2},
-  {key:'depreciation',       label:'Depreciation',                   type:'item',   indent:2},
-  {key:'taxes',              label:'Taxes',                          type:'item',   indent:2},
-  {key:'net_income',         label:'Net Income',                     type:'total',  indent:1, calc:d=>n(d,'ebitda')+n(d,'other_income')-n(d,'other_exp')-n(d,'rd_exp')-n(d,'taxes')-n(d,'interest_exp')-n(d,'depreciation')},
-  {key:'net_income_pct',     label:'Net Income % of Revenue',        type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'net_income')/n(d,'total_income'):0},
-];
+const FS_PERIODS_ORDERED = ['2024-01','2024-02','2024-03','2024-04','2024-05','2024-06','2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2024'];
 
-function n(data, key){ return parseFloat(data[key]||0)||0; }
-function fsResolve(rows, data){
-  // Build a virtual data object with calculated fields
-  const d = Object.assign({}, data);
-  rows.forEach(r=>{ if(r.calc) d[r.key] = r.calc(d); });
-  return d;
+function fsPeriodLabel(p){
+  if(!p) return '—';
+  if(p === '2024') return 'FY 2024';
+  return new Date(p+'-15').toLocaleDateString('en-US',{month:'short',year:'numeric'});
 }
 
-let FS_EDITING = false;
-
-function fsSaveEdits(){
-  const period = document.getElementById('fsPeriodSel')?.value;
-  if(!period){ alert('Select a period first'); return; }
-  if(!STATE.fsData[period]) STATE.fsData[period] = {};
-  // Collect all editable inputs
-  document.querySelectorAll('[data-fs-field]').forEach(el=>{
-    const key = el.dataset.fsField;
-    const raw = el.value.replace(/[^0-9.\-]/g,'');
-    STATE.fsData[period][key] = raw ? parseFloat(raw) : 0;
-  });
-  saveState();
-  buildFSSummary(getFilteredDeals());
+function toggleFSSection(bodyId){
+  const body = document.getElementById(bodyId);
+  const toggleId = bodyId === 'fsSummaryBody' ? 'fsSummaryToggle' : 'fsVarianceToggle';
+  const toggle = document.getElementById(toggleId);
+  if(!body) return;
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  if(toggle) toggle.textContent = hidden ? '▲ collapse' : '▼ expand';
 }
 
-function buildFSSummary(deals){
+function fmtFS(val, isPct){
+  if(isPct) return val != null ? (val*100).toFixed(2)+'%' : '—';
+  if(val == null || val === 0) return '—';
+  return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(val);
+}
+
+function buildFSWorkbookSections(){
+  const periods = FS_PERIODS_ORDERED;
+  const monthly = periods.filter(p=>p!=='2024');
+
   // Populate period selector
-  const allPeriods = [...new Set(deals.map(d=>d.fundedDate?.slice(0,7)).filter(Boolean))].sort().reverse();
-  const sel = document.getElementById('fsPeriodSel');
-  if(!sel) return;
-  const prevVal = sel.value;
-  sel.innerHTML = allPeriods.map(p=>`<option value="${p}" ${p===prevVal?'selected':''}>${p}</option>`).join('');
-  if(!sel.value && allPeriods.length) sel.value = allPeriods[0];
-  const period = sel.value || '';
-  const periodLabel = period ? new Date(period+'-15').toLocaleDateString('en-US',{month:'short',year:'numeric'}) : '—';
-  document.getElementById('fsBSPeriod').textContent = periodLabel;
-  document.getElementById('fsISPeriod').textContent = periodLabel;
-
-  const raw = STATE.fsData[period] || {};
-
-  function renderFSTable(tableId, rows){
-    const resolved = fsResolve(rows, raw);
-    const tbl = document.getElementById(tableId);
-    if(!tbl) return;
-    const isMoney = key => !key.endsWith('_pct');
-    tbl.innerHTML = `<thead><tr><th style="width:60%">Line Item</th><th style="width:20%;text-align:right">Amount</th><th style="width:20%;text-align:right">Notes</th></tr></thead>
-    <tbody>${rows.map(r=>{
-      if(r.type==='header') return `<tr style="background:rgba(139,92,246,.08)"><td colspan="3" style="font-weight:700;font-size:11px;color:var(--purple);padding-left:${(r.indent||0)*14}px;text-transform:uppercase;letter-spacing:.5px">${r.label}</td></tr>`;
-      const val = resolved[r.key] || 0;
-      const isCalc = !!r.calc;
-      const isPct = r.type === 'pct';
-      const isTotal = r.type==='total' || r.type==='subtotal';
-      const dispVal = isPct ? (val*100).toFixed(1)+'%' : fmt$(val);
-      const fmtClass = isTotal?'font-weight:700':'';
-      const bgStyle = r.type==='total'?'background:rgba(88,166,255,.06)':r.type==='subtotal'?'background:rgba(30,35,50,.5)':'';
-      const colorStyle = isTotal?'color:var(--blue)':r.type==='subtotal'?'color:var(--text)':'color:var(--muted)';
-      const inputHtml = isCalc ? `<span style="${fmtClass};${colorStyle}">${dispVal}</span>`
-        : `<input data-fs-field="${r.key}" value="${val||''}" placeholder="0"
-            style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:2px 6px;width:120px;text-align:right;font-weight:${isTotal?'700':'400'}"
-            oninput="this.form&&this.form.reportValidity()" />`;
-      return `<tr style="${bgStyle}">
-        <td style="padding-left:${(r.indent||0)*14+4}px;font-weight:${isTotal?'700':'400'}">${r.label}</td>
-        <td style="text-align:right">${inputHtml}</td>
-        <td style="text-align:right;color:var(--muted);font-size:10px">${isCalc?'auto':''}</td>
-      </tr>`;
-    }).join('')}</tbody>`;
+  const fsSel = document.getElementById('fsPeriodSel');
+  if(fsSel){
+    const prev = fsSel.value;
+    fsSel.innerHTML = periods.map(p=>`<option value="${p}">${fsPeriodLabel(p)}</option>`).join('');
+    if(prev && periods.includes(prev)) fsSel.value = prev;
+    else fsSel.value = '2024-12';
   }
 
-  renderFSTable('fsBSTable', FS_BALANCE_SHEET);
-  renderFSTable('fsISTable', FS_INCOME_STMT);
-
-  // Portfolio Metrics — auto-calculated from deal data for selected period
-  const periodDeals = deals.filter(d=>d.fundedDate?.slice(0,7)===period);
-  const totalFunded  = periodDeals.reduce((a,d)=>a+d.amount,0);
-  const totalRTR     = periodDeals.reduce((a,d)=>a+d.rtr,0);
-  const totalColl    = periodDeals.reduce((a,d)=>a+d.collected,0);
-  const totalRem     = periodDeals.reduce((a,d)=>a+d.remaining,0);
-  const totalMgmt    = periodDeals.reduce((a,d)=>a+(d.mgmtFee||0),0);
-  const totalComm    = periodDeals.reduce((a,d)=>a+(d.commission||0),0);
-  const totalDisc    = periodDeals.reduce((a,d)=>a+(d.discounts||0),0);
-  const totalWriteOff= periodDeals.reduce((a,d)=>a+(d.writeOff||0),0);
-  const dealCount    = periodDeals.length;
-  const avgSize      = dealCount ? totalFunded/dealCount : 0;
-  const avgFactor    = periodDeals.filter(d=>d.factor>0).length ? periodDeals.reduce((a,d)=>a+d.factor,0)/periodDeals.filter(d=>d.factor>0).length : 0;
-  const avgTerm      = periodDeals.filter(d=>d.term>0).length ? periodDeals.reduce((a,d)=>a+d.term,0)/periodDeals.filter(d=>d.term>0).length : 0;
-  const recRate      = calcRecRate(totalColl, totalFunded, totalComm, 0);
-  const statusCounts = {};
-  const defaultStatuses = ['collection','in - house collections','bankruptcy','legal','in house legal','under - performing','syndication default'];
-  periodDeals.forEach(d=>{
-    const s = (d.status||'Unknown').toLowerCase();
-    statusCounts[s] = (statusCounts[s]||0)+1;
-  });
-  const totalDefault = defaultStatuses.reduce((a,s)=>a+(statusCounts[s]||0),0);
-
-  const mRow = (label, val, fmt) => `<tr><td style="color:var(--muted)">${label}</td><td style="text-align:right;font-weight:600">${fmt?fmt(val):val}</td></tr>`;
-  const sep  = (label) => `<tr style="background:rgba(139,92,246,.08)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">${label}</td></tr>`;
-
-  const tbl = document.getElementById('fsPMTable');
-  if(tbl) tbl.innerHTML = `<thead><tr><th style="width:60%">Metric</th><th style="text-align:right;width:40%">Value</th></tr></thead><tbody>
-    ${sep('Funding')}
-    ${mRow('Funded',totalFunded,fmtFull$)}
-    ${mRow('Funded Units',dealCount)}
-    ${mRow('Avg Deal Size',avgSize,fmtFull$)}
-    ${mRow('Avg Factor Rate',avgFactor,v=>v?v.toFixed(4):'—')}
-    ${mRow('Avg Deal Length (days)',avgTerm,v=>v?Math.round(v)+'d':'—')}
-    ${mRow('Commissions',totalComm,fmtFull$)}
-    ${mRow('Commissions % of Funded',totalFunded?totalComm/totalFunded:0,v=>(v*100).toFixed(2)+'%')}
-    ${sep('Collections')}
-    ${mRow('Total RTR',totalRTR,fmtFull$)}
-    ${mRow('Collected Amount',totalColl,fmtFull$)}
-    ${mRow('Management Fees',totalMgmt,fmtFull$)}
-    ${mRow('Discounts',totalDisc,fmtFull$)}
-    ${mRow('Write-Offs',totalWriteOff,fmtFull$)}
-    ${mRow('Remaining RTR',totalRem,fmtFull$)}
-    ${sep('Performance')}
-    ${mRow('Recovery Rate',recRate,v=>v?(v*100).toFixed(2)+'%':'—')}
-    ${mRow('Total in Default',totalDefault)}
-    ${mRow('Default Rate %',dealCount?totalDefault/dealCount:0,v=>(v*100).toFixed(1)+'%')}
-    ${sep('Deal Status Breakdown')}
-    ${Object.entries(statusCounts).sort((a,b)=>b[1]-a[1]).map(([s,c])=>mRow(s.charAt(0).toUpperCase()+s.slice(1),c)).join('')}
-  </tbody>`;
-}
-
-// ============================================================
-// VARIANCE ANALYSIS TAB
-// ============================================================
-function buildVarianceTab(deals){
-  // Populate period selectors
-  const allPeriods = [...new Set(deals.map(d=>d.fundedDate?.slice(0,7)).filter(Boolean))].sort().reverse();
+  // Populate variance selectors
   const currSel = document.getElementById('varCurrSel');
   const priorSel = document.getElementById('varPriorSel');
-  if(!currSel || !priorSel) return;
-
-  const prevCurr = currSel.value;
-  const prevPrior = priorSel.value;
-  currSel.innerHTML  = allPeriods.map(p=>`<option value="${p}">${p}</option>`).join('');
-  priorSel.innerHTML = allPeriods.map(p=>`<option value="${p}">${p}</option>`).join('');
-  if(prevCurr && allPeriods.includes(prevCurr)) currSel.value = prevCurr;
-  else if(allPeriods.length) currSel.value = allPeriods[0];
-  if(prevPrior && allPeriods.includes(prevPrior)) priorSel.value = prevPrior;
-  else if(allPeriods.length>1) priorSel.value = allPeriods[1];
-
-  const currP  = currSel.value;
-  const priorP = priorSel.value;
-  const lbl = p => p ? new Date(p+'-15').toLocaleDateString('en-US',{month:'short',year:'numeric'}) : '—';
-  document.getElementById('varPortSub').textContent = `${lbl(currP)} vs ${lbl(priorP)}`;
-
-  const dealsC = deals.filter(d=>d.fundedDate?.slice(0,7)===currP);
-  const dealsP = deals.filter(d=>d.fundedDate?.slice(0,7)===priorP);
-
-  function pm(ds){
-    const funded  = ds.reduce((a,d)=>a+d.amount,0);
-    const rtr     = ds.reduce((a,d)=>a+d.rtr,0);
-    const coll    = ds.reduce((a,d)=>a+d.collected,0);
-    const rem     = ds.reduce((a,d)=>a+d.remaining,0);
-    const mgmt    = ds.reduce((a,d)=>a+(d.mgmtFee||0),0);
-    const comm    = ds.reduce((a,d)=>a+(d.commission||0),0);
-    const disc    = ds.reduce((a,d)=>a+(d.discounts||0),0);
-    const wo      = ds.reduce((a,d)=>a+(d.writeOff||0),0);
-    const cnt     = ds.length;
-    const factDs  = ds.filter(d=>d.factor>0);
-    const avgF    = factDs.length ? ds.reduce((a,d)=>a+d.factor,0)/factDs.length : 0;
-    const termDs  = ds.filter(d=>d.term>0);
-    const avgT    = termDs.length ? ds.reduce((a,d)=>a+d.term,0)/termDs.length : 0;
-    const rec     = calcRecRate(coll, funded, comm, 0);
-    return {funded,rtr,coll,rem,mgmt,comm,disc,wo,cnt,avgF,avgT,rec,avgSize:cnt?funded/cnt:0};
+  if(currSel && priorSel){
+    const prevC = currSel.value, prevP = priorSel.value;
+    const opts = periods.map(p=>`<option value="${p}">${fsPeriodLabel(p)}</option>`).join('');
+    currSel.innerHTML = opts; priorSel.innerHTML = opts;
+    currSel.value = (prevC && periods.includes(prevC)) ? prevC : '2024-12';
+    priorSel.value = (prevP && periods.includes(prevP)) ? prevP : '2024-11';
   }
 
-  const C = pm(dealsC), P = pm(dealsP);
+  buildFSSummaryTables();
+  buildFSVarianceTables();
+}
 
-  // Charts
-  makeChart('varFundedChart','bar',{
-    labels:[lbl(priorP), lbl(currP)],
-    datasets:[
-      {label:'Funded',      data:[P.funded, C.funded],      backgroundColor:['rgba(88,166,255,.5)','rgba(88,166,255,.9)'],  borderRadius:4},
-      {label:'Collected',   data:[P.coll,   C.coll],        backgroundColor:['rgba(63,185,80,.5)', 'rgba(63,185,80,.9)'],   borderRadius:4},
-      {label:'Remaining',   data:[P.rem,    C.rem],         backgroundColor:['rgba(240,136,62,.5)','rgba(240,136,62,.9)'],  borderRadius:4},
-    ]
-  },{yFmt:v=>fmt$(v)});
-  makeChart('varMetricsChart','bar',{
-    labels:[lbl(priorP), lbl(currP)],
-    datasets:[
-      {label:'Deals',        data:[P.cnt,    C.cnt],         backgroundColor:['rgba(167,139,250,.5)','rgba(167,139,250,.9)'],borderRadius:4,yAxisID:'y'},
-      {label:'Recovery Rate',data:[P.rec*100,C.rec*100],     type:'line',borderColor:'#3fb950',pointRadius:5,borderWidth:2,  yAxisID:'y2'},
-    ]
-  },{y2:true, yFmt:v=>v.toFixed(0), y2Fmt:v=>v.toFixed(1)+'%'});
+function buildFSSummaryTables(){
+  const sel = document.getElementById('fsPeriodSel');
+  const period = sel ? sel.value : '2024-12';
+  const d = FS_WORKBOOK_DATA[period] || {};
+  const sub = document.getElementById('fsSummarySub');
+  if(sub) sub.textContent = fsPeriodLabel(period);
 
-  function varRow(label, curr, prior, fmtFn, higherIsBetter=true){
-    const diff = curr - prior;
-    const pct  = prior !== 0 ? diff/Math.abs(prior) : (curr!==0?1:0);
-    const dir  = diff > 0 ? (higherIsBetter ? 'up' : 'down') : diff < 0 ? (higherIsBetter ? 'down' : 'up') : 'neu';
-    const arrow= diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
-    const f    = fmtFn || (v=>v.toFixed(0));
-    return `<tr>
-      <td>${label}</td>
-      <td style="text-align:right">${f(curr)}</td>
-      <td style="text-align:right;color:var(--muted)">${f(prior)}</td>
-      <td style="text-align:right">${fmtFull$(diff)}</td>
-      <td class="${dir}" style="text-align:right">${arrow} ${prior!==0?(Math.abs(pct)*100).toFixed(1)+'%':'N/A'}</td>
-    </tr>`;
+  function fsRow(label, val, isPct, isBold, isSub, isHdr){
+    if(isHdr) return `<tr style="background:rgba(139,92,246,.08)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
+    const style = isBold ? 'font-weight:700' : 'font-weight:400;color:var(--muted)';
+    const bg = isBold && !isSub ? 'background:rgba(88,166,255,.06)' : isSub ? 'background:rgba(30,35,50,.4)' : '';
+    return `<tr style="${bg}"><td style="${style};padding-left:${isBold?'8':'20'}px">${label}</td><td style="text-align:right;font-weight:${isBold?'700':'400'};color:${isBold?'var(--blue)':'var(--text)'}">${fmtFS(val,isPct)}</td></tr>`;
   }
-  function varHdr(label){
-    return `<tr style="background:rgba(139,92,246,.08)"><td colspan="5" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">${label}</td></tr>`;
-  }
-  const hdr = `<thead><tr><th>Metric</th><th style="text-align:right">${lbl(currP)}</th><th style="text-align:right;color:var(--muted)">${lbl(priorP)}</th><th style="text-align:right">$ Change</th><th style="text-align:right">% Change</th></tr></thead>`;
 
-  document.getElementById('varPortTable').innerHTML = hdr + `<tbody>
-    ${varHdr('Deal Volume')}
-    ${varRow('# Deals',C.cnt,P.cnt,v=>v.toFixed(0))}
-    ${varRow('Total Funded',C.funded,P.funded,fmtFull$)}
-    ${varRow('Avg Deal Size',C.avgSize,P.avgSize,fmtFull$)}
-    ${varRow('Avg Factor Rate',C.avgF,P.avgF,v=>v?v.toFixed(4):'0',false)}
-    ${varRow('Avg Term (days)',C.avgT,P.avgT,v=>v?Math.round(v)+'d':'0d',true)}
-    ${varHdr('Collections')}
-    ${varRow('Total RTR',C.rtr,P.rtr,fmtFull$)}
-    ${varRow('Collected',C.coll,P.coll,fmtFull$)}
-    ${varRow('Remaining RTR',C.rem,P.rem,fmtFull$,false)}
-    ${varRow('Management Fees',C.mgmt,P.mgmt,fmtFull$)}
-    ${varRow('Commissions',C.comm,P.comm,fmtFull$,false)}
-    ${varRow('Discounts',C.disc,P.disc,fmtFull$,false)}
-    ${varHdr('Performance')}
-    ${varRow('Recovery Rate',C.rec*100,P.rec*100,v=>v.toFixed(2)+'%')}
+  // Balance Sheet
+  const bsTbl = document.getElementById('fsBSTable');
+  if(bsTbl) bsTbl.innerHTML = `<thead><tr><th>Line Item</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+    ${fsRow('ASSETS',null,false,false,false,true)}
+    ${fsRow('Current Assets',null,false,false,false,true)}
+    ${fsRow('Cash and Cash Equivalents', d.cash)}
+    ${fsRow('Accounts Receivable', d.ar)}
+    ${fsRow('Other Current Assets', d.other_ca)}
+    ${fsRow('Total Current Assets', d.total_ca,false,true)}
+    ${fsRow('Long Term Assets', d.lt_assets)}
+    ${fsRow('Fixed Assets', d.fixed_assets)}
+    ${fsRow('Total Non-Current Assets', d.total_nca,false,true)}
+    ${fsRow('Total Assets', d.total_assets,false,true,false)}
+    ${fsRow('LIABILITIES',null,false,false,false,true)}
+    ${fsRow('Accrued Expenses', d.accrued_exp)}
+    ${fsRow('Syndicate Partners Payable', d.synd_payable)}
+    ${fsRow('ISO Commissions Payable', d.iso_payable)}
+    ${fsRow('Deferred Income', d.deferred_income)}
+    ${fsRow('Credit Card', d.credit_card)}
+    ${fsRow('Total for Credit Cards', d.total_cc,false,false,true)}
+    ${fsRow('Other Current Liabilities', d.other_cl)}
+    ${fsRow('Total Other Current Liabilities', d.total_ocl,false,false,true)}
+    ${fsRow('Total Current Liabilities', d.total_cl,false,true,false)}
+    ${fsRow('Long Term Liabilities', d.lt_liab)}
+    ${fsRow('Total Non-Current Liabilities', d.total_ncl,false,false,true)}
+    ${fsRow('Total Liabilities', d.total_liab,false,true)}
+    ${fsRow('EQUITY',null,false,false,false,true)}
+    ${fsRow('Distribution', d.distribution)}
+    ${fsRow('Opening Balance Equity', d.opening_equity)}
+    ${fsRow('Retained Earnings', d.retained_earnings)}
+    ${fsRow('Net Income', d.net_income_bs)}
+    ${fsRow('Total Equity', d.total_equity,false,false,true)}
+    ${fsRow('Total Liabilities and Equity', d.total_liab_equity,false,true)}
   </tbody>`;
 
-  // Financial Statement Variance (from manually entered FS data)
-  const fsC = STATE.fsData[currP] || {};
-  const fsP = STATE.fsData[priorP] || {};
-  const resolvedC = fsResolve([...FS_BALANCE_SHEET,...FS_INCOME_STMT], fsC);
-  const resolvedP = fsResolve([...FS_BALANCE_SHEET,...FS_INCOME_STMT], fsP);
-  const fsVarRows = [
-    ...FS_INCOME_STMT.filter(r=>r.type==='total'||r.type==='subtotal'||r.type==='pct'),
-    ...FS_BALANCE_SHEET.filter(r=>r.type==='total'),
-  ];
+  // Income Statement
+  const isTbl = document.getElementById('fsISTable');
+  if(isTbl) isTbl.innerHTML = `<thead><tr><th>Line Item</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+    ${fsRow('INCOME',null,false,false,false,true)}
+    ${fsRow('Origination Income', d.orig_income)}
+    ${fsRow('Collection Fee Income', d.coll_fee_income)}
+    ${fsRow('Monthly Fee Income', d.monthly_fee_income)}
+    ${fsRow('Commission Fee Income', d.comm_fee_income)}
+    ${fsRow('Default Fee Income', d.default_fee_income)}
+    ${fsRow('Management Fee Income', d.mgmt_fee_income)}
+    ${fsRow('Total Income', d.total_income,false,true)}
+    ${fsRow('COST OF GOODS SOLD',null,false,false,false,true)}
+    ${fsRow('Commission Expenses', d.comm_exp)}
+    ${fsRow('Other Cost of Goods Sold', d.other_cogs)}
+    ${fsRow('Total Cost of Goods Sold', d.total_cogs,false,true)}
+    ${fsRow('Gross Profit', d.gross_profit,false,true)}
+    ${fsRow('Gross Margin %', d.gross_margin_pct,true)}
+    ${fsRow('OPERATING EXPENSES',null,false,false,false,true)}
+    ${fsRow('Bank Fees & Service Charges', d.bank_fees)}
+    ${fsRow('Office Expenses', d.office_exp)}
+    ${fsRow('Software Expense', d.software_exp)}
+    ${fsRow('Total Payroll & Related Expenses', d.payroll_total)}
+    ${fsRow('Professional Fees', d.prof_fees)}
+    ${fsRow('Sales & Marketing Expenses', d.sales_mktg)}
+    ${fsRow('Insurance', d.insurance)}
+    ${fsRow('Transportation and Travel', d.travel)}
+    ${fsRow('Utilities', d.utilities)}
+    ${fsRow('Rent Expenses', d.rent)}
+    ${fsRow('Total Operating Expenses', d.total_opex,false,true)}
+    ${fsRow('Expenses % of Revenue', d.exp_pct_rev != null ? d.exp_pct_rev/100 : null,true)}
+    ${fsRow('EBITDA', d.ebitda,false,true)}
+    ${fsRow('BELOW THE LINE',null,false,false,false,true)}
+    ${fsRow('Other Income', d.other_income)}
+    ${fsRow('Other Expenses', d.other_exp)}
+    ${fsRow('Research & Development', d.rd_exp)}
+    ${fsRow('Interest Expense', d.interest_exp)}
+    ${fsRow('Depreciation', d.depreciation)}
+    ${fsRow('Taxes', d.taxes)}
+    ${fsRow('Net Income', d.net_income,false,true)}
+    ${fsRow('Net Income % of Revenue', d.net_income_pct != null ? d.net_income_pct/100 : null,true)}
+    ${fsRow('Growth (MoM)', d.growth != null ? d.growth/100 : null,true)}
+  </tbody>`;
 
-  const hasFS = Object.keys(fsC).length > 0 || Object.keys(fsP).length > 0;
-  document.getElementById('varFSTable').innerHTML = hasFS ? (hdr + `<tbody>${
-    fsVarRows.map(r=>{
-      if(!r.calc) return '';
-      const cval = resolvedC[r.key]||0;
-      const pval = resolvedP[r.key]||0;
-      const isPct = r.type==='pct';
-      const fmtFn = isPct ? v=>(v*100).toFixed(1)+'%' : fmtFull$;
-      return varHdr(r.label) === r ? '' : varRow(r.label, cval, pval, fmtFn);
-    }).join('')
-  }</tbody>`) : `<tbody><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Enter Balance Sheet &amp; Income Statement data in the <a href="#" onclick="switchTab('fssummary');return false" style="color:var(--purple)">FS Summary</a> tab to see financial variance.</td></tr></tbody>`;
+  // P&L KPIs
+  const kpiTbl = document.getElementById('fsKpiTable');
+  if(kpiTbl) kpiTbl.innerHTML = `<thead><tr><th>KPI</th><th style="text-align:right">Value</th></tr></thead><tbody>
+    ${fsRow('INCOME AS % OF FUNDED',null,false,false,false,true)}
+    ${fsRow('Collection Fee % of Funded', d.kpi_coll_fee_pct_funded,true)}
+    ${fsRow('Monthly Fee % of Funded', d.kpi_monthly_pct_funded,true)}
+    ${fsRow('Commission Fee % of Funded', d.kpi_comm_fee_pct_funded,true)}
+    ${fsRow('Default Fee % of Funded', d.kpi_default_pct_funded,true)}
+    ${fsRow('Management Fee % of Funded', d.kpi_mgmt_pct_funded,true)}
+    ${fsRow('Total Income % of Funded', d.total_income_pct_funded,true,true)}
+    ${fsRow('INCOME AS % OF COLLECTIONS',null,false,false,false,true)}
+    ${fsRow('Collection Fee % of Collections', d.kpi_coll_fee_pct_coll,true)}
+    ${fsRow('Monthly Fee % of Collections', d.kpi_monthly_pct_coll,true)}
+    ${fsRow('Commission Fee % of Collections', d.kpi_comm_fee_pct_coll,true)}
+    ${fsRow('Default Fee % of Collections', d.kpi_default_pct_coll,true)}
+    ${fsRow('Management Fee % of Collections', d.kpi_mgmt_pct_coll,true)}
+    ${fsRow('Total Income % of Collections', d.total_income_pct_coll,true,true)}
+    ${fsRow('COGS AS % OF FUNDED',null,false,false,false,true)}
+    ${fsRow('Commission Exp % of Funded', d.kpi_comm_exp_pct_funded,true)}
+    ${fsRow('Other COGS % of Funded', d.kpi_other_cogs_pct_funded,true)}
+    ${fsRow('Total COGS % of Funded', d.total_cogs_pct_funded,true,true)}
+    ${fsRow('EXPENSES AS % OF FUNDED',null,false,false,false,true)}
+    ${fsRow('Bank Fees % of Funded', d.kpi_bankfees_pct_funded,true)}
+    ${fsRow('Office % of Funded', d.kpi_office_pct_funded,true)}
+    ${fsRow('Software % of Funded', d.kpi_software_pct_funded,true)}
+    ${fsRow('Payroll % of Funded', d.kpi_payroll_pct_funded,true)}
+    ${fsRow('Professional Fees % of Funded', d.kpi_proffees_pct_funded,true)}
+    ${fsRow('Sales & Mktg % of Funded', d.kpi_sales_pct_funded,true)}
+    ${fsRow('Rent % of Funded', d.kpi_rent_pct_funded,true)}
+    ${fsRow('Total Expenses % of Funded', d.total_exp_pct_funded,true,true)}
+    ${fsRow('Net Income % of Funded', d.net_income_pct_funded,true,true)}
+    ${fsRow('EXPENSES AS % OF ORIGINATION INCOME',null,false,false,false,true)}
+    ${fsRow('Bank Fees % of Orig Income', d.kpi_bankfees_pct_orig,true)}
+    ${fsRow('Office % of Orig Income', d.kpi_office_pct_orig,true)}
+    ${fsRow('Software % of Orig Income', d.kpi_software_pct_orig,true)}
+    ${fsRow('Professional Fees % of Orig Income', d.kpi_proffees_pct_orig,true)}
+    ${fsRow('Sales & Mktg % of Orig Income', d.kpi_sales_pct_orig,true)}
+    ${fsRow('Travel % of Orig Income', d.kpi_travel_pct_orig,true)}
+    ${fsRow('Rent % of Orig Income', d.kpi_rent_pct_orig,true)}
+    ${fsRow('Total Expenses % of Orig Income', d.total_exp_pct_orig,true,true)}
+  </tbody>`;
 }
+
+function buildFSVarianceTables(){
+  const currSel = document.getElementById('varCurrSel');
+  const priorSel = document.getElementById('varPriorSel');
+  const cPeriod = currSel ? currSel.value : '2024-12';
+  const pPeriod = priorSel ? priorSel.value : '2024-11';
+  const C = FS_WORKBOOK_DATA[cPeriod] || {};
+  const P = FS_WORKBOOK_DATA[pPeriod] || {};
+  const cLbl = fsPeriodLabel(cPeriod);
+  const pLbl = fsPeriodLabel(pPeriod);
+
+  function varRow(label, cVal, pVal, isPct, higherBetter, isBold, isHdr){
+    if(isHdr) return `<tr style="background:rgba(139,92,246,.08)"><td colspan="6" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
+    const cv = cVal || 0, pv = pVal || 0;
+    const diff = cv - pv;
+    const pct = pv !== 0 ? diff/Math.abs(pv) : (cv!==0 ? 1 : 0);
+    const dir = diff > 0 ? (higherBetter!==false?'up':'down') : diff < 0 ? (higherBetter!==false?'down':'up') : 'neu';
+    const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
+    const fmt = isPct ? v=>(v*100).toFixed(2)+'%' : v=>fmtFS(v,false);
+    const diffStr = isPct ? (diff>0?'+':'')+((diff||0)*100).toFixed(2)+'%' : fmtFS(diff,false);
+    const pctStr = pv !== 0 ? (Math.abs(pct)*100).toFixed(1)+'%' : 'N/A';
+    const bold = isBold ? 'font-weight:700;' : '';
+    const bg = isBold ? 'background:rgba(88,166,255,.06)' : '';
+    return `<tr style="${bg}">
+      <td style="${bold}padding-left:${isBold?'8':'20'}px">${label}</td>
+      <td style="text-align:right;${bold}">${fmt(cv)}</td>
+      <td style="text-align:right;color:var(--muted)">${fmt(pv)}</td>
+      <td style="text-align:right">${diffStr}</td>
+      <td class="${dir}" style="text-align:right">${arrow} ${pctStr}</td>
+    </tr>`;
+  }
+
+  const hdr = `<thead><tr><th>Line Item</th><th style="text-align:right">${cLbl}</th><th style="text-align:right;color:var(--muted)">${pLbl}</th><th style="text-align:right">Change ($/%)</th><th style="text-align:right">% Change</th></tr></thead>`;
+
+  // BS Variance
+  const bsTbl = document.getElementById('fsVarBSTable');
+  if(bsTbl) bsTbl.innerHTML = `<caption style="text-align:left;font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">Balance Sheet Variance</caption>${hdr}<tbody>
+    ${varRow('ASSETS',null,null,false,true,false,true)}
+    ${varRow('Cash and Cash Equivalents', C.cash, P.cash)}
+    ${varRow('Accounts Receivable', C.ar, P.ar)}
+    ${varRow('Other Current Assets', C.other_ca, P.other_ca)}
+    ${varRow('Total Current Assets', C.total_ca, P.total_ca,false,true,true)}
+    ${varRow('Total Non-Current Assets', C.total_nca, P.total_nca,false,true,true)}
+    ${varRow('Total Assets', C.total_assets, P.total_assets,false,true,true)}
+    ${varRow('LIABILITIES',null,null,false,true,false,true)}
+    ${varRow('Accrued Expenses', C.accrued_exp, P.accrued_exp,false,false)}
+    ${varRow('Syndicate Partners Payable', C.synd_payable, P.synd_payable,false,false)}
+    ${varRow('ISO Commissions Payable', C.iso_payable, P.iso_payable,false,false)}
+    ${varRow('Total Current Liabilities', C.total_cl, P.total_cl,false,false,true)}
+    ${varRow('Total Liabilities', C.total_liab, P.total_liab,false,false,true)}
+    ${varRow('EQUITY',null,null,false,true,false,true)}
+    ${varRow('Retained Earnings', C.retained_earnings, P.retained_earnings,false,true)}
+    ${varRow('Net Income', C.net_income_bs, P.net_income_bs,false,true)}
+    ${varRow('Total Equity', C.total_equity, P.total_equity,false,true,true)}
+    ${varRow('Total Liabilities and Equity', C.total_liab_equity, P.total_liab_equity,false,true,true)}
+  </tbody>`;
+
+  // IS Variance
+  const isTbl = document.getElementById('fsVarISTable');
+  if(isTbl) isTbl.innerHTML = `${hdr}<tbody>
+    ${varRow('INCOME',null,null,false,true,false,true)}
+    ${varRow('Origination Income', C.orig_income, P.orig_income,false,true)}
+    ${varRow('Collection Fee Income', C.coll_fee_income, P.coll_fee_income,false,true)}
+    ${varRow('Monthly Fee Income', C.monthly_fee_income, P.monthly_fee_income,false,true)}
+    ${varRow('Commission Fee Income', C.comm_fee_income, P.comm_fee_income,false,true)}
+    ${varRow('Default Fee Income', C.default_fee_income, P.default_fee_income,false,true)}
+    ${varRow('Management Fee Income', C.mgmt_fee_income, P.mgmt_fee_income,false,true)}
+    ${varRow('Total Income', C.total_income, P.total_income,false,true,true)}
+    ${varRow('COST OF GOODS SOLD',null,null,false,false,false,true)}
+    ${varRow('Commission Expenses', C.comm_exp, P.comm_exp,false,false)}
+    ${varRow('Other COGS', C.other_cogs, P.other_cogs,false,false)}
+    ${varRow('Total COGS', C.total_cogs, P.total_cogs,false,false,true)}
+    ${varRow('Gross Profit', C.gross_profit, P.gross_profit,false,true,true)}
+    ${varRow('Gross Margin %', C.gross_margin_pct, P.gross_margin_pct,true,true)}
+    ${varRow('OPERATING EXPENSES',null,null,false,false,false,true)}
+    ${varRow('Bank Fees & Service Charges', C.bank_fees, P.bank_fees,false,false)}
+    ${varRow('Office Expenses', C.office_exp, P.office_exp,false,false)}
+    ${varRow('Software Expense', C.software_exp, P.software_exp,false,false)}
+    ${varRow('Total Payroll & Related Expenses', C.payroll_total, P.payroll_total,false,false)}
+    ${varRow('Professional Fees', C.prof_fees, P.prof_fees,false,false)}
+    ${varRow('Sales & Marketing', C.sales_mktg, P.sales_mktg,false,false)}
+    ${varRow('Total Operating Expenses', C.total_opex, P.total_opex,false,false,true)}
+    ${varRow('EBITDA', C.ebitda, P.ebitda,false,true,true)}
+    ${varRow('Net Income', C.net_income, P.net_income,false,true,true)}
+    ${varRow('Net Income % of Revenue', C.net_income_pct != null ? C.net_income_pct/100 : 0, P.net_income_pct != null ? P.net_income_pct/100 : 0,true,true)}
+  </tbody>`;
+
+  // KPI Variance
+  const kpiTbl = document.getElementById('fsVarKpiTable');
+  if(kpiTbl) kpiTbl.innerHTML = `${hdr}<tbody>
+    ${varRow('INCOME AS % OF FUNDED',null,null,false,true,false,true)}
+    ${varRow('Collection Fee % of Funded', C.kpi_coll_fee_pct_funded, P.kpi_coll_fee_pct_funded,true,true)}
+    ${varRow('Monthly Fee % of Funded', C.kpi_monthly_pct_funded, P.kpi_monthly_pct_funded,true,true)}
+    ${varRow('Management Fee % of Funded', C.kpi_mgmt_pct_funded, P.kpi_mgmt_pct_funded,true,true)}
+    ${varRow('Total Income % of Funded', C.total_income_pct_funded, P.total_income_pct_funded,true,true,true)}
+    ${varRow('INCOME AS % OF COLLECTIONS',null,null,false,true,false,true)}
+    ${varRow('Management Fee % of Collections', C.kpi_mgmt_pct_coll, P.kpi_mgmt_pct_coll,true,true)}
+    ${varRow('Total Income % of Collections', C.total_income_pct_coll, P.total_income_pct_coll,true,true,true)}
+    ${varRow('EXPENSES AS % OF FUNDED',null,null,false,false,false,true)}
+    ${varRow('Bank Fees % of Funded', C.kpi_bankfees_pct_funded, P.kpi_bankfees_pct_funded,true,false)}
+    ${varRow('Office % of Funded', C.kpi_office_pct_funded, P.kpi_office_pct_funded,true,false)}
+    ${varRow('Payroll % of Funded', C.kpi_payroll_pct_funded, P.kpi_payroll_pct_funded,true,false)}
+    ${varRow('Total Expenses % of Funded', C.total_exp_pct_funded, P.total_exp_pct_funded,true,false,true)}
+    ${varRow('Net Income % of Funded', C.net_income_pct_funded, P.net_income_pct_funded,true,true,true)}
+  </tbody>`;
+}
+
 
 // ============================================================
 // TIME ANALYSIS TAB
@@ -4855,13 +4812,11 @@ function switchTab(t){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const tc=document.getElementById('tab-'+t); if(tc) tc.classList.add('active');
-  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','fssummary','variance','upload','share'];
+  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','upload','share'];
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
-  if(t==='fssummary') buildFSSummary(getFilteredDeals());
-  if(t==='variance') buildVarianceTab(getFilteredDeals());
   if(t==='recovery') requestAnimationFrame(()=>{
     try{ buildRecoveryTab(); }
     catch(e){
