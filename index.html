@@ -888,9 +888,9 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
             <input type="file" id="fi-fsb" class="uc-input" accept=".csv,.xlsx,.xls,.xlsm" onchange="handleFSUpload('bs',this)" style="display:none">
             <div class="uc-icon">🏦</div>
             <div class="uc-title">Balance Sheet</div>
-            <div class="uc-sub">QuickBooks → Reports → Balance Sheet. One file per snapshot date (select the period below).</div>
-            <div style="margin-top:6px;display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
-              <label style="font-size:10px;color:var(--muted)">Period:</label>
+            <div class="uc-sub">QuickBooks → Reports → Balance Sheet. Multiple periods are detected automatically.</div>
+            <div id="fi-fsb-period-row" style="margin-top:6px;display:none;align-items:center;gap:6px" onclick="event.stopPropagation()">
+              <label style="font-size:10px;color:var(--muted)">Period (fallback):</label>
               <input type="month" id="fi-fsb-period" style="font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:2px 4px" placeholder="YYYY-MM">
             </div>
             <div class="uc-status" id="uc-fsb-status"></div>
@@ -1409,25 +1409,66 @@ function parsePLbyMonth(rows){
   return result; // { 'YYYY-MM': { field: value } }
 }
 
-function parseBalanceSheet(rows, period){
-  if(!rows.length || !period) return null;
+function parseBalanceSheet(rows){
+  // Same column-detection approach as parsePLbyMonth: first col = account name, rest = period columns
+  if(!rows.length) return {};
   const keys = Object.keys(rows[0]);
   const accountCol = keys[0];
-  // Value column: find first numeric column (often the second)
-  let valueCol = keys[1];
+
+  // Identify period columns (month headers)
+  const periodCols = [];
   for(let i=1; i<keys.length; i++){
-    const sample = rows.find(r => typeof r[keys[i]] === 'number' || (String(r[keys[i]]||'').match(/[\d\.]/)));
-    if(sample){ valueCol = keys[i]; break; }
+    const p = parseQBMonthHeader(keys[i]);
+    if(p){ periodCols.push({key:keys[i], period:p}); continue; }
+    const cellVal = rows[0][keys[i]];
+    const p2 = parseQBMonthHeader(cellVal);
+    if(p2) periodCols.push({key:keys[i], period:p2});
   }
 
+  // Fallback: scan rows for a header row with month names
+  if(!periodCols.length){
+    for(const row of rows){
+      let found = 0;
+      const candidates = [];
+      for(let i=1; i<keys.length; i++){
+        const p = parseQBMonthHeader(row[keys[i]]);
+        if(p){ found++; candidates.push({key:keys[i], period:p}); }
+      }
+      if(found >= 2){ periodCols.push(...candidates); break; }
+    }
+  }
+
+  // If still no periods found, treat any numeric column as a single snapshot —
+  // return a flat object keyed by field so the caller can assign it to a period
+  if(!periodCols.length){
+    let valueCol = keys[1];
+    for(let i=1; i<keys.length; i++){
+      if(rows.some(r => typeof r[keys[i]]==='number')){ valueCol = keys[i]; break; }
+    }
+    const flat = {};
+    for(const row of rows){
+      const field = qbAccountKey(String(row[accountCol]||'').trim(), QB_BS_ACCOUNT_MAP);
+      if(!field) continue;
+      const raw = row[valueCol];
+      const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
+      if(!isNaN(num)) flat[field] = num;
+    }
+    return {_flat: flat}; // caller will ask user for the period
+  }
+
+  // Build result: { 'YYYY-MM': { field: value } }
   const result = {};
+  periodCols.forEach(pc => { result[pc.period] = {}; });
+
   for(const row of rows){
     const acctRaw = String(row[accountCol]||'').trim();
     const field = qbAccountKey(acctRaw, QB_BS_ACCOUNT_MAP);
     if(!field) continue;
-    const raw = row[valueCol];
-    const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
-    if(!isNaN(num)) result[field] = num;
+    for(const pc of periodCols){
+      const raw = row[pc.key];
+      const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
+      if(!isNaN(num)) result[pc.period][field] = num;
+    }
   }
   return result;
 }
@@ -1467,15 +1508,25 @@ function handleFSUpload(subtype, input){
         });
         if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} loaded`;
       } else {
-        const period = document.getElementById('fi-fsb-period')?.value;
-        if(!period){ if(statusEl) statusEl.textContent = '⚠ Select a period first'; return; }
-        const parsed = parseBalanceSheet(rows, period);
-        if(!parsed || !Object.keys(parsed).length){
+        const parsed = parseBalanceSheet(rows);
+        if(parsed._flat){
+          // Single-column file: no period headers detected — show period picker
+          if(statusEl) statusEl.textContent = '⚠ No period columns detected. Select a period above and re-upload.';
+          document.getElementById('fi-fsb-period-row').style.display = '';
+          return;
+        }
+        const periods = Object.keys(parsed);
+        if(!periods.length){
           if(statusEl) statusEl.textContent = '⚠ No recognized accounts found';
           return;
         }
-        STATE.fsData[period] = Object.assign(STATE.fsData[period]||{}, parsed);
-        if(statusEl) statusEl.textContent = `✓ Balance Sheet → ${period}`;
+        periods.forEach(p => {
+          STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
+        });
+        // Hide period picker — not needed for multi-period files
+        const pRow = document.getElementById('fi-fsb-period-row');
+        if(pRow) pRow.style.display = 'none';
+        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} loaded`;
       }
 
       // Update info panel
