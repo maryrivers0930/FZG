@@ -3851,6 +3851,47 @@ function fmtFS(val, isPct){
   return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(val);
 }
 
+// IS fields that should be summed across periods; BS fields use end-of-period snapshot
+const FS_IS_SUM_FIELDS = ['orig_income','coll_fee_income','monthly_fee_income','comm_fee_income',
+  'default_fee_income','mgmt_fee_income','total_income','comm_exp','other_cogs','total_cogs',
+  'gross_profit','bank_fees','office_exp','software_exp','payroll_total','prof_fees','sales_mktg',
+  'insurance','travel','utilities','rent','total_opex','ebitda','other_income','other_exp',
+  'rd_exp','interest_exp','depreciation','taxes','net_income'];
+
+function getFSWbRow(periodK){
+  if(FS_WORKBOOK_DATA[periodK]) return FS_WORKBOOK_DATA[periodK];
+  // Quarter aggregation: sum IS fields, use end-of-quarter BS snapshot
+  if(periodK && periodK.includes('-Q')){
+    const [year, qStr] = periodK.split('-Q');
+    const q = parseInt(qStr);
+    const mMap = {1:['01','02','03'],2:['04','05','06'],3:['07','08','09'],4:['10','11','12']};
+    const months = (mMap[q]||[]).map(m=>`${year}-${m}`).filter(k=>FS_WORKBOOK_DATA[k]);
+    if(!months.length) return {};
+    const last = FS_WORKBOOK_DATA[months[months.length-1]];
+    const agg = Object.assign({}, last);
+    FS_IS_SUM_FIELDS.forEach(f=>{ agg[f] = months.reduce((s,k)=>s+(FS_WORKBOOK_DATA[k][f]||0), 0); });
+    agg.gross_margin_pct = agg.total_income ? agg.gross_profit/agg.total_income : 0;
+    agg.exp_pct_rev = agg.total_income ? agg.total_opex/agg.total_income : 0;
+    agg.net_income_pct = agg.total_income ? agg.net_income/agg.total_income : 0;
+    agg.growth = null; // not meaningful for aggregated quarter
+    return agg;
+  }
+  return {};
+}
+
+function getFSWbAllPeriods(periods){
+  if(!periods.length) return {};
+  const rows = periods.map(p=>getFSWbRow(p));
+  const last = rows[rows.length-1] || {};
+  const agg = Object.assign({}, last);
+  FS_IS_SUM_FIELDS.forEach(f=>{ agg[f] = rows.reduce((s,d)=>s+(d[f]||0), 0); });
+  agg.gross_margin_pct = agg.total_income ? agg.gross_profit/agg.total_income : 0;
+  agg.exp_pct_rev = agg.total_income ? agg.total_opex/agg.total_income : 0;
+  agg.net_income_pct = agg.total_income ? agg.net_income/agg.total_income : 0;
+  agg.growth = null;
+  return agg;
+}
+
 function computeFSMetrics(deals){
   // Compute financial metrics from deal data
   const funded   = deals.reduce((a,d)=>a+d.amount,0);
@@ -3930,7 +3971,6 @@ function matchIsoHeight(){
 function buildFSSummaryTables(deals){
   deals = deals || getFilteredDeals();
 
-  // Group deals by period using the same Group By as the rest of the dashboard
   const byPeriod = {};
   deals.forEach(d => {
     const k = periodKey(d.fundedDate, STATE.groupBy);
@@ -3939,10 +3979,9 @@ function buildFSSummaryTables(deals){
   });
   const periods = Object.keys(byPeriod).sort();
 
-  // Update subtitle
   const sub = document.getElementById('fsSummarySub');
-  const gbLabel = STATE.groupBy === 'month' ? 'Monthly' : STATE.groupBy === 'quarter' ? 'Quarterly' : 'Annual';
-  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''} · from filtered deals`;
+  const gbLabel = STATE.groupBy==='month'?'Monthly':STATE.groupBy==='quarter'?'Quarterly':'Annual';
+  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''}`;
 
   const tbl = document.getElementById('fsSummaryTable');
   if(!tbl) return;
@@ -3951,73 +3990,157 @@ function buildFSSummaryTables(deals){
     return;
   }
 
-  // Compute metrics for each period
-  const metrics = {};
-  periods.forEach(p => { metrics[p] = computeFSMetrics(byPeriod[p]); });
+  // Deal-computed metrics per period (respects all filters)
+  const dm = {}, wbd = {};
+  periods.forEach(p => {
+    dm[p]  = computeFSMetrics(byPeriod[p]);
+    wbd[p] = getFSWbRow(p);
+  });
+  const allDm  = computeFSMetrics(deals);
+  const allWbd = getFSWbAllPeriods(periods);
 
-  // Also compute totals column
-  const allM = computeFSMetrics(deals);
-
+  const N = periods.length, showTotal = N > 1;
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
-  const N = periods.length;
-  const showTotal = N > 1;
 
-  function fmtC(val, isPct){
-    if(val == null) return '<td style="text-align:right;color:var(--muted)">—</td>';
-    const disp = isPct ? (val*100).toFixed(2)+'%' : fmtFS(val, false);
-    return `<td style="text-align:right">${disp}</td>`;
-  }
-  function fmtCBold(val, isPct){
-    if(val == null) return '<td style="text-align:right;color:var(--blue);font-weight:700">—</td>';
-    const disp = isPct ? (val*100).toFixed(2)+'%' : fmtFS(val, false);
-    return `<td style="text-align:right;font-weight:700;color:var(--blue)">${disp}</td>`;
-  }
-  function hdrRow(label){
-    return `<tr style="background:rgba(139,92,246,.08)"><td colspan="${N + 1 + (showTotal?1:0)}" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
-  }
-  function dataRow(label, key, isPct, isBold){
-    const fmt = isBold ? fmtCBold : fmtC;
-    const rowBg = isBold ? 'style="background:rgba(88,166,255,.06)"' : '';
-    const lStyle = isBold ? 'style="font-weight:700;padding-left:8px"' : 'style="padding-left:20px;color:var(--muted)"';
-    const cells = periods.map(p => fmt(metrics[p][key], isPct)).join('');
-    const totalCell = showTotal ? fmt(allM[key], isPct) : '';
-    return `<tr ${rowBg}><td ${lStyle}>${label}</td>${cells}${totalCell}</tr>`;
+  // ── Formatting helpers ──────────────────────────────────────────
+  function cell(val, isPct, bold){
+    const missing = val == null || val === undefined || (typeof val==='number' && isNaN(val));
+    const disp = missing ? '—'
+      : isPct ? (val*100).toFixed(2)+'%'
+      : fmtFS(val, false);
+    const s = bold
+      ? 'text-align:right;font-weight:700;color:var(--blue)'
+      : missing ? 'text-align:right;color:var(--muted)' : 'text-align:right';
+    return `<td style="${s}">${disp}</td>`;
   }
 
-  const thCols = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
+  // Section header row (purple band = top-level, indented = sub-section)
+  function sHdr(label, sub=false){
+    const bg  = sub ? 'rgba(30,36,50,.6)' : 'rgba(139,92,246,.1)';
+    const clr = sub ? 'var(--muted)' : 'var(--purple)';
+    const pl  = sub ? '20px' : '8px';
+    return `<tr style="background:${bg}"><td colspan="${N+1+(showTotal?1:0)}"
+      style="font-weight:700;font-size:11px;color:${clr};text-transform:uppercase;letter-spacing:.5px;padding:5px ${pl}"
+      >${label}</td></tr>`;
+  }
+
+  // Data row sourced from workbook (static QB data)
+  function wRow(label, field, isPct, bold){
+    const lStyle = bold
+      ? 'font-weight:700;padding-left:8px'
+      : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold)).join('');
+    const tot   = showTotal ? cell(allWbd[field], isPct, bold) : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+
+  // Data row sourced from deal data (respects filters)
+  function dRow(label, key, isPct, bold){
+    const lStyle = bold
+      ? 'font-weight:700;padding-left:8px'
+      : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => cell(dm[p][key], isPct, bold)).join('');
+    const tot   = showTotal ? cell(allDm[key], isPct, bold) : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+
+  // ── Header row ──────────────────────────────────────────────────
+  const thCols  = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
   const thTotal = showTotal ? `<th style="text-align:right;color:var(--purple);white-space:nowrap">Total</th>` : '';
-  const thead = `<thead><tr><th style="min-width:220px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
+  const thead   = `<thead><tr><th style="min-width:240px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
 
   tbl.innerHTML = thead + `<tbody>
-    ${hdrRow('Income Statement')}
-    ${dataRow('Management Fee Income',   'mgmtFee',      false, false)}
-    ${dataRow('Total Income',            'mgmtFee',      false, true)}
-    ${dataRow('Commission Expenses (ISO)','commission',  false, false)}
-    ${dataRow('Total COGS',              'totalCogs',    false, true)}
-    ${dataRow('Gross Profit',            'grossProfit',  false, true)}
-    ${dataRow('Gross Margin %',          'grossMargin',  true,  false)}
-    ${dataRow('Bank Fees',               'bankFee',      false, false)}
-    ${dataRow('Total OpEx',              'totalOpex',    false, true)}
-    ${dataRow('EBITDA',                  'ebitda',       false, true)}
-    ${dataRow('Net Income',              'netIncome',    false, true)}
-    ${dataRow('Net Income % of Revenue', 'niPctRev',     true,  false)}
-    ${hdrRow('Portfolio')}
-    ${dataRow('Total Funded',            'funded',       false, false)}
-    ${dataRow('Total Collected',         'collected',    false, false)}
-    ${dataRow('Total RTR',               'rtr',          false, false)}
-    ${dataRow('Remaining RTR',           'remaining',    false, false)}
-    ${dataRow('Recovery Rate',           'recRate',      true,  true)}
-    ${hdrRow('P&L Metrics (% of Funded)')}
-    ${dataRow('Management Fee %',        'mgmtPctFunded',true,  false)}
-    ${dataRow('Commission %',            'commPctFunded',true,  false)}
-    ${dataRow('Bank Fee %',              'bankPctFunded',true,  false)}
-    ${dataRow('Net Income %',            'netPctFunded', true,  true)}
-    ${hdrRow('P&L Metrics (% of Collections)')}
-    ${dataRow('Management Fee %',        'mgmtPctColl',  true,  false)}
-    ${dataRow('Commission %',            'commPctColl',  true,  false)}
-    ${hdrRow('Write-Offs & Discounts')}
-    ${dataRow('Write-Offs',              'writeOff',     false, false)}
-    ${dataRow('Discounts',               'discounts',    false, false)}
+    ${sHdr('Balance Sheet')}
+    ${sHdr('Assets', true)}
+    ${sHdr('Current Assets', true)}
+    ${wRow('Cash and Cash Equivalents',          'cash',             false, false)}
+    ${wRow('Accounts Receivable',                'ar',               false, false)}
+    ${wRow('Other Current Assets',               'other_ca',         false, false)}
+    ${wRow('Total Current Assets',               'total_ca',         false, true)}
+    ${sHdr('Long Term Assets', true)}
+    ${wRow('Fixed Assets',                       'fixed_assets',     false, false)}
+    ${wRow('Total Non-Current Assets',           'total_nca',        false, true)}
+    ${wRow('Total Assets',                       'total_assets',     false, true)}
+    ${sHdr('Liabilities', true)}
+    ${wRow('Accrued Expenses',                   'accrued_exp',      false, false)}
+    ${wRow('Syndicate Partners Payable',         'synd_payable',     false, false)}
+    ${wRow('ISO Commissions Payable',            'iso_payable',      false, false)}
+    ${wRow('Deferred Income',                    'deferred_income',  false, false)}
+    ${wRow('Credit Card',                        'credit_card',      false, false)}
+    ${wRow('Total for Credit Cards',             'total_cc',         false, true)}
+    ${wRow('Other Current Liabilities',          'other_cl',         false, false)}
+    ${wRow('Total for Other Current Liabilities','total_ocl',        false, true)}
+    ${wRow('Total Current Liabilities',          'total_cl',         false, true)}
+    ${wRow('Long Term Liabilities',              'lt_liab',          false, false)}
+    ${wRow('Total Non Current Liabilities',      'total_ncl',        false, true)}
+    ${wRow('Total Liabilities',                  'total_liab',       false, true)}
+    ${sHdr('Equity', true)}
+    ${wRow('Distribution',                       'distribution',     false, false)}
+    ${wRow('Opening Balance Equity',             'opening_equity',   false, false)}
+    ${wRow('Retained Earnings',                  'retained_earnings',false, false)}
+    ${wRow('Net Income',                         'net_income_bs',    false, false)}
+    ${wRow('Total Equity',                       'total_equity',     false, true)}
+    ${wRow('Total Liabilities and Equity',       'total_liab_equity',false, true)}
+
+    ${sHdr('Income Statement for Period Ended')}
+    ${sHdr('Income', true)}
+    ${wRow('Origination Income',                 'orig_income',      false, false)}
+    ${wRow('Collection Fee Income',              'coll_fee_income',  false, false)}
+    ${wRow('Monthly Fee Income',                 'monthly_fee_income',false,false)}
+    ${wRow('Commission Fee Income',              'comm_fee_income',  false, false)}
+    ${wRow('Default Fee Income',                 'default_fee_income',false,false)}
+    ${dRow('Management Fee Income',              'mgmtFee',          false, false)}
+    ${wRow('Total Income',                       'total_income',     false, true)}
+    ${sHdr('Cost of Goods Sold', true)}
+    ${dRow('Commission Expenses',                'commission',       false, false)}
+    ${wRow('Other Cost of Goods Sold',           'other_cogs',       false, false)}
+    ${wRow('Total Cost of Goods Sold',           'total_cogs',       false, true)}
+    ${wRow('Gross Profit',                       'gross_profit',     false, true)}
+    ${wRow('Gross Margin %',                     'gross_margin_pct', true,  false)}
+    ${sHdr('Operating Expenses', true)}
+    ${dRow('Bank Fees & Service Charges',        'bankFee',          false, false)}
+    ${wRow('Office Expenses',                    'office_exp',       false, false)}
+    ${wRow('Software Expense',                   'software_exp',     false, false)}
+    ${wRow('Payroll and Related Expenses',       'payroll_total',    false, false)}
+    ${wRow('Professional Fees',                  'prof_fees',        false, false)}
+    ${wRow('Sales & Marketing Expenses',         'sales_mktg',       false, false)}
+    ${wRow('Insurance',                          'insurance',        false, false)}
+    ${wRow('Transportation and Travel',          'travel',           false, false)}
+    ${wRow('Utilities',                          'utilities',        false, false)}
+    ${wRow('Rent Expenses',                      'rent',             false, false)}
+    ${wRow('Total for Expenses',                 'total_opex',       false, true)}
+    ${wRow('Expenses % of Revenue',              'exp_pct_rev',      true,  false)}
+    ${wRow('EBITDA',                             'ebitda',           false, true)}
+    ${wRow('Other Income',                       'other_income',     false, false)}
+    ${wRow('Other Expenses',                     'other_exp',        false, false)}
+    ${wRow('Research and Development',           'rd_exp',           false, false)}
+    ${wRow('Interest Expense',                   'interest_exp',     false, false)}
+    ${wRow('Depreciation',                       'depreciation',     false, false)}
+    ${wRow('Taxes',                              'taxes',            false, false)}
+    ${wRow('Net Income',                         'net_income',       false, true)}
+    ${wRow('Net Income % of Revenue',            'net_income_pct',   true,  false)}
+    ${wRow('Growth',                             'growth',           true,  false)}
+
+    ${sHdr('Portfolio Metrics')}
+    ${dRow('Deal Count',                         'cnt',              false, false)}
+    ${dRow('Total Funded',                       'funded',           false, false)}
+    ${dRow('Total Collected',                    'collected',        false, false)}
+    ${dRow('Total RTR',                          'rtr',              false, false)}
+    ${dRow('Remaining RTR',                      'remaining',        false, false)}
+    ${dRow('Recovery Rate',                      'recRate',          true,  true)}
+    ${sHdr('P&L Metrics — % of Funded', true)}
+    ${dRow('Management Fee %',                   'mgmtPctFunded',    true,  false)}
+    ${dRow('Commission %',                       'commPctFunded',    true,  false)}
+    ${dRow('Bank Fee %',                         'bankPctFunded',    true,  false)}
+    ${dRow('Net Income %',                       'netPctFunded',     true,  true)}
+    ${sHdr('P&L Metrics — % of Collections', true)}
+    ${dRow('Management Fee %',                   'mgmtPctColl',      true,  false)}
+    ${dRow('Commission %',                       'commPctColl',      true,  false)}
+    ${sHdr('Write-Offs & Discounts', true)}
+    ${dRow('Write-Offs',                         'writeOff',         false, false)}
+    ${dRow('Discounts',                          'discounts',        false, false)}
   </tbody>`;
 }
 
