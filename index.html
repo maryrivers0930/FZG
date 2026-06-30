@@ -4435,8 +4435,8 @@ function buildFSVarianceTables(deals){
   }
   // Management-fee denominator (from deal data mgmtFee vs wbd field)
   function mfVR(label, numF, higher, bold){
-    const cv = cD.mgmtFee ? (cW[numF]||0)/cD.mgmtFee : null;
-    const pv = pD.mgmtFee ? (pW[numF]||0)/pD.mgmtFee : null;
+    const cv = cW.mgmt_fee_income ? (cW[numF]||0)/cW.mgmt_fee_income : null;
+    const pv = pW.mgmt_fee_income ? (pW[numF]||0)/pW.mgmt_fee_income : null;
     return varRow(label, cv, pv, true, higher, bold);
   }
 
