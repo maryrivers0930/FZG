@@ -4715,36 +4715,40 @@ function computeFSMetrics(deals){
 
 function buildFSWorkbookSections(deals){
   deals = deals || getFilteredDeals();
-  // Populate variance period dropdowns from available periods in filtered data + uploaded FS data
-  const byPeriod = {};
-  deals.forEach(d => {
-    const k = periodKey(d.fundedDate, STATE.groupBy);
-    if(!byPeriod[k]) byPeriod[k] = [];
-    byPeriod[k].push(d);
+
+  // Variance Analysis dropdowns: populate from ALL uploaded FS periods (no date filter)
+  // so users can compare any two periods regardless of the sidebar date selection.
+  const varByPeriod = {};
+  // All months present in uploaded QB data (the primary source for variance analysis)
+  Object.keys(STATE.fsData).forEach(fsKey => {
+    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+    const k = periodKey(fsKey + '-15', STATE.groupBy);
+    varByPeriod[k] = true;
   });
-  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
-    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
-    Object.keys(STATE.fsData).forEach(fsKey => {
-      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
-      if(_ff && fsKey < _ff) return;
-      if(_ft && fsKey > _ft) return;
-      const k = periodKey(fsKey + '-15', STATE.groupBy);
-      if(!byPeriod[k]) byPeriod[k] = [];
+  // Also include all deal periods from the entity (unfiltered by date)
+  const _ent = activeEntity();
+  if(_ent && _ent.dealsByPeriod){
+    Object.values(_ent.dealsByPeriod).flat().forEach(d => {
+      if(d.fundedDate){
+        const k = periodKey(d.fundedDate, STATE.groupBy);
+        varByPeriod[k] = true;
+      }
     });
   }
-  const periods = Object.keys(byPeriod).sort();
+  const allPeriods = Object.keys(varByPeriod).sort();
+
   const currSel = document.getElementById('varCurrSel');
   const priorSel = document.getElementById('varPriorSel');
   if(currSel && priorSel){
     const prevCurr = currSel.value;
     const prevPrior = priorSel.value;
-    const opts = periods.map(p => `<option value="${p}">${periodLabel(p, STATE.groupBy)}</option>`).join('');
+    const opts = allPeriods.map(p => `<option value="${p}">${periodLabel(p, STATE.groupBy)}</option>`).join('');
     currSel.innerHTML = opts;
     priorSel.innerHTML = opts;
     // Default: latest two periods; restore user selection if still valid
-    if(periods.length >= 2){
-      currSel.value  = periods.includes(prevCurr)  ? prevCurr  : periods[periods.length - 1];
-      priorSel.value = periods.includes(prevPrior) ? prevPrior : periods[periods.length - 2];
+    if(allPeriods.length >= 2){
+      currSel.value  = allPeriods.includes(prevCurr)  ? prevCurr  : allPeriods[allPeriods.length - 1];
+      priorSel.value = allPeriods.includes(prevPrior) ? prevPrior : allPeriods[allPeriods.length - 2];
     }
   }
   // Rebuild both tabs if they are currently active
@@ -5058,32 +5062,31 @@ function buildFSSummaryTables(deals){
 }
 
 function buildFSVarianceTables(deals){
-  deals = deals || getFilteredDeals();
-
+  // Build a deal lookup by period from ALL entity deals (unfiltered by date)
+  // so the selected comparison periods can span any year.
   const byPeriod = {};
-  deals.forEach(d => {
-    const k = periodKey(d.fundedDate, STATE.groupBy);
-    if(!byPeriod[k]) byPeriod[k] = [];
-    byPeriod[k].push(d);
-  });
-  // Include periods that exist in uploaded financial statements even if no deals fall in that period
-  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
-    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
-    Object.keys(STATE.fsData).forEach(fsKey => {
-      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
-      if(_ff && fsKey < _ff) return;
-      if(_ft && fsKey > _ft) return;
-      const k = periodKey(fsKey + '-15', STATE.groupBy);
+  const _varEnt = activeEntity();
+  if(_varEnt && _varEnt.dealsByPeriod){
+    Object.values(_varEnt.dealsByPeriod).flat().forEach(d => {
+      if(!d.fundedDate) return;
+      const k = periodKey(d.fundedDate, STATE.groupBy);
       if(!byPeriod[k]) byPeriod[k] = [];
+      byPeriod[k].push(d);
     });
   }
+  // Include all uploaded FS periods (no date filter — variance spans years)
+  Object.keys(STATE.fsData).forEach(fsKey => {
+    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+    const k = periodKey(fsKey + '-15', STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+  });
   const periods = Object.keys(byPeriod).sort();
   const tbl = document.getElementById('fsVarTable');
   const sub = document.getElementById('fsVarianceSub');
   if(!tbl) return;
   if(periods.length < 2){
     if(sub) sub.textContent = '';
-    tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">Need at least two periods in the filtered dataset to show variance</td></tr></tbody>';
+    tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">Need at least two periods in the uploaded financial data to show variance</td></tr></tbody>';
     return;
   }
 
