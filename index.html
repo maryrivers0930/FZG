@@ -402,6 +402,8 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="tab" onclick="switchTab('dimensions')">🏷️ Dimensions</div>
     <div class="tab" onclick="switchTab('time')">📅 Time Analysis</div>
     <div class="tab" onclick="switchTab('recovery')">📈 Recovery Rates</div>
+    <div class="tab" onclick="switchTab('fssummary')">📋 FS Summary</div>
+    <div class="tab" onclick="switchTab('variance')">📊 Variance Analysis</div>
     <div class="tab" onclick="switchTab('upload')">📁 Data Upload</div>
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
   </div>
@@ -612,27 +614,39 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="tbl-wrap"><table class="data-tbl" id="coverDealTable"></table></div>
     </div>
 
-    <!-- FS Summary -->
-    <div class="section" style="margin-top:20px" id="fsSummarySection">
-      <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsSummaryBody')">
-        <span class="section-title">FS Summary</span>
-        <span class="section-sub" id="fsSummarySub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
-        <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsSummaryToggle">▲ collapse</span>
-      </div>
-      <div id="fsSummaryBody">
-        <div class="tbl-wrap" id="fsSummaryTblWrap"><table class="data-tbl" id="fsSummaryTable"></table></div>
+  </div>
+
+  <!-- ===== FS SUMMARY TAB ===== -->
+  <div id="tab-fssummary" class="tab-content">
+    <div style="padding:16px 20px">
+      <div class="section">
+        <div class="section-hdr">
+          <span class="section-title">FS Summary</span>
+          <span class="section-sub" id="fsSummarySub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
+        </div>
+        <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="fsSummaryTable"></table></div>
       </div>
     </div>
+  </div>
 
-    <!-- Variance Analysis -->
-    <div class="section" style="margin-top:16px" id="fsVarianceSection">
-      <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsVarianceBody')">
-        <span class="section-title">Variance Analysis</span>
-        <span class="section-sub" id="fsVarianceSub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
-        <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsVarianceToggle">▲ collapse</span>
-      </div>
-      <div id="fsVarianceBody">
-        <div class="tbl-wrap"><table class="data-tbl" id="fsVarTable" style="min-width:600px"></table></div>
+  <!-- ===== VARIANCE ANALYSIS TAB ===== -->
+  <div id="tab-variance" class="tab-content">
+    <div style="padding:16px 20px">
+      <div class="section">
+        <div class="section-hdr" style="flex-wrap:wrap;gap:8px">
+          <span class="section-title">Variance Analysis</span>
+          <span class="section-sub" id="fsVarianceSub" style="margin-left:4px;font-size:11px;color:var(--muted)"></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--muted)">Primary</span>
+            <select id="varCurrSel" onchange="buildFSVarianceTables()"
+              style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:3px 8px;outline:none"></select>
+            <span style="font-size:11px;color:var(--muted)">vs</span>
+            <span style="font-size:11px;color:var(--muted)">Compare</span>
+            <select id="varPriorSel" onchange="buildFSVarianceTables()"
+              style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:3px 8px;outline:none"></select>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="fsVarTable" style="min-width:600px"></table></div>
       </div>
     </div>
   </div>
@@ -3870,8 +3884,31 @@ function computeFSMetrics(deals){
 
 function buildFSWorkbookSections(deals){
   deals = deals || getFilteredDeals();
-  buildFSSummaryTables(deals);
-  buildFSVarianceTables(deals);
+  // Populate variance period dropdowns from available periods in filtered data
+  const byPeriod = {};
+  deals.forEach(d => {
+    const k = periodKey(d.fundedDate, STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+    byPeriod[k].push(d);
+  });
+  const periods = Object.keys(byPeriod).sort();
+  const currSel = document.getElementById('varCurrSel');
+  const priorSel = document.getElementById('varPriorSel');
+  if(currSel && priorSel){
+    const prevCurr = currSel.value;
+    const prevPrior = priorSel.value;
+    const opts = periods.map(p => `<option value="${p}">${periodLabel(p, STATE.groupBy)}</option>`).join('');
+    currSel.innerHTML = opts;
+    priorSel.innerHTML = opts;
+    // Default: latest two periods; restore user selection if still valid
+    if(periods.length >= 2){
+      currSel.value  = periods.includes(prevCurr)  ? prevCurr  : periods[periods.length - 1];
+      priorSel.value = periods.includes(prevPrior) ? prevPrior : periods[periods.length - 2];
+    }
+  }
+  // Rebuild both tabs if they are currently active
+  if(document.getElementById('tab-fssummary')?.classList.contains('active')) buildFSSummaryTables(deals);
+  if(document.getElementById('tab-variance')?.classList.contains('active')) buildFSVarianceTables(deals);
 }
 
 function matchIsoHeight(){
@@ -3987,7 +4024,7 @@ function buildFSSummaryTables(deals){
 function buildFSVarianceTables(deals){
   deals = deals || getFilteredDeals();
 
-  // Auto-detect most-recent two periods from filtered deals using Group By
+  // Group deals by period
   const byPeriod = {};
   deals.forEach(d => {
     const k = periodKey(d.fundedDate, STATE.groupBy);
@@ -4004,9 +4041,11 @@ function buildFSVarianceTables(deals){
     return;
   }
 
-  // Latest two periods
-  const cP = periods[periods.length - 1];
-  const pP = periods[periods.length - 2];
+  // Use dropdown selection if available, otherwise fall back to latest two periods
+  const currSel  = document.getElementById('varCurrSel');
+  const priorSel = document.getElementById('varPriorSel');
+  const cP = (currSel  && byPeriod[currSel.value])  ? currSel.value  : periods[periods.length - 1];
+  const pP = (priorSel && byPeriod[priorSel.value]) ? priorSel.value : periods[periods.length - 2];
   const cLbl = periodLabel(cP, STATE.groupBy);
   const pLbl = periodLabel(pP, STATE.groupBy);
   if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
@@ -4752,12 +4791,14 @@ function switchTab(t){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const tc=document.getElementById('tab-'+t); if(tc) tc.classList.add('active');
-  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','upload','share'];
+  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','fssummary','variance','upload','share'];
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
   if(t==='cover') matchIsoHeight();
+  if(t==='fssummary') buildFSSummaryTables(getFilteredDeals());
+  if(t==='variance') buildFSVarianceTables();
   if(t==='recovery') requestAnimationFrame(()=>{
     try{ buildRecoveryTab(); }
     catch(e){
