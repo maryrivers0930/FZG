@@ -870,6 +870,40 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
         </div>
       </div>
 
+      <!-- Financial Statements Upload -->
+      <div class="section" style="background:var(--surface2);margin-top:12px;margin-bottom:12px">
+        <div class="section-hdr" style="margin-bottom:10px">
+          <span class="section-title">📊 Financial Statements</span>
+          <span class="section-sub">QuickBooks exports for FS Summary &amp; Variance Analysis</span>
+        </div>
+        <div class="upload-grid" id="uploadGridFS" style="grid-template-columns:1fr 1fr">
+          <div class="upload-card" id="uc-fsp" onclick="document.getElementById('fi-fsp').click()">
+            <input type="file" id="fi-fsp" class="uc-input" accept=".csv,.xlsx,.xls,.xlsm" onchange="handleFSUpload('pl',this)" style="display:none">
+            <div class="uc-icon">📈</div>
+            <div class="uc-title">Profit &amp; Loss by Month</div>
+            <div class="uc-sub">QuickBooks → Reports → Profit and Loss by Month. Covers all months you want to display.</div>
+            <div class="uc-status" id="uc-fsp-status"></div>
+          </div>
+          <div class="upload-card" id="uc-fsb" onclick="document.getElementById('fi-fsb').click()">
+            <input type="file" id="fi-fsb" class="uc-input" accept=".csv,.xlsx,.xls,.xlsm" onchange="handleFSUpload('bs',this)" style="display:none">
+            <div class="uc-icon">🏦</div>
+            <div class="uc-title">Balance Sheet</div>
+            <div class="uc-sub">QuickBooks → Reports → Balance Sheet. One file per snapshot date (select the period below).</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+              <label style="font-size:10px;color:var(--muted)">Period:</label>
+              <input type="month" id="fi-fsb-period" style="font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:2px 4px" placeholder="YYYY-MM">
+            </div>
+            <div class="uc-status" id="uc-fsb-status"></div>
+          </div>
+        </div>
+        <div id="fsUploadInfo" style="font-size:10px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;display:none">
+          <b style="color:var(--text)">Loaded periods:</b> <span id="fsUploadPeriodList">—</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">
+          QB account names are matched automatically. Unrecognized accounts are ignored — upload again after renaming accounts in QB if needed.
+        </div>
+      </div>
+
       <!-- Period History Management -->
       <div id="periodHistSection" style="margin-bottom:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -1101,6 +1135,10 @@ function activeEntity(){ return getEntity(STATE.activeEntityId); }
 // INIT
 // ============================================================
 loadState();
+// Seed STATE.fsData with 2024 workbook defaults if the user hasn't uploaded any financial statements yet
+if(Object.keys(STATE.fsData).length === 0){
+  STATE.fsData = Object.assign({}, FS_WORKBOOK_DATA);
+}
 document.addEventListener('DOMContentLoaded', ()=>{
   // Migrate old format: if entity has .deals[] but no .dealsByPeriod, migrate
   STATE.entities.forEach(ent=>{
@@ -1246,6 +1284,223 @@ function triggerPeriodUpload(){
   closeModal('periodUploadModal');
   const type=STATE._pendingUploadType;
   document.getElementById('fi-'+type).click();
+}
+
+// ============================================================
+// QB FINANCIAL STATEMENT PARSERS
+// ============================================================
+
+function qbAccountKey(name, map){
+  const k = (name||'').toLowerCase().trim().replace(/\s+/g,' ');
+  if(map[k]) return map[k];
+  // partial match: check if any map key starts with or is contained in k
+  for(const mk of Object.keys(map)){
+    if(k === mk || k.startsWith(mk) || mk.startsWith(k)) return map[mk];
+  }
+  return null;
+}
+
+function parseQBMonthHeader(cell){
+  // Handles: "Jan 2024", "Jan 24", "January 2024", "01/2024", "2024-01"
+  if(!cell) return null;
+  const s = String(cell).trim();
+  const iso = s.match(/^(\d{4})-(\d{2})$/);
+  if(iso) return `${iso[1]}-${iso[2]}`;
+  const slash = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if(slash) return `${slash[2]}-${slash[1].padStart(2,'0')}`;
+  const monthNames = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+    jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
+    january:'01',february:'02',march:'03',april:'04',june:'06',
+    july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'};
+  const named = s.match(/^([a-z]+)[\s\-]+(\d{2,4})$/i);
+  if(named){
+    const mn = monthNames[(named[1]||'').toLowerCase()];
+    if(mn){
+      const yr = named[2].length===2 ? '20'+named[2] : named[2];
+      return `${yr}-${mn}`;
+    }
+  }
+  return null;
+}
+
+function parsePLbyMonth(rows){
+  // rows is an array of objects from XLSX.utils.sheet_to_json
+  // Find the header row: the row whose keys include month-like values
+  // QB exports: first column = account name, rest = months + "Total"
+  if(!rows.length) return {};
+
+  // Get column keys
+  const keys = Object.keys(rows[0]);
+  const accountCol = keys[0]; // first column is always account name
+
+  // Identify month columns
+  const monthCols = []; // [{key, period}]
+  for(let i=1; i<keys.length; i++){
+    // Try the column header itself
+    const p = parseQBMonthHeader(keys[i]);
+    if(p) { monthCols.push({key:keys[i], period:p}); continue; }
+    // Sometimes the value in row 0 contains the month name
+    const cellVal = rows[0][keys[i]];
+    const p2 = parseQBMonthHeader(cellVal);
+    if(p2) monthCols.push({key:keys[i], period:p2});
+  }
+
+  // If no month cols found from headers, try scanning all rows for a header row
+  if(!monthCols.length){
+    for(const row of rows){
+      const vals = Object.values(row);
+      let found = 0;
+      const candidates = [];
+      for(let i=1; i<keys.length; i++){
+        const p = parseQBMonthHeader(row[keys[i]]);
+        if(p){ found++; candidates.push({key:keys[i], period:p}); }
+      }
+      if(found >= 2){ monthCols.push(...candidates); break; }
+    }
+  }
+
+  if(!monthCols.length) return {};
+
+  // Build result: { 'YYYY-MM': { field: value, ... } }
+  const result = {};
+  monthCols.forEach(mc => { result[mc.period] = {}; });
+
+  for(const row of rows){
+    const acctRaw = String(row[accountCol]||'').trim();
+    const field = qbAccountKey(acctRaw, QB_PL_ACCOUNT_MAP);
+    if(!field) continue;
+    for(const mc of monthCols){
+      const raw = row[mc.key];
+      const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
+      if(!isNaN(num)) result[mc.period][field] = num;
+    }
+  }
+
+  // Derive computed fields for each period
+  for(const p of Object.keys(result)){
+    const r = result[p];
+    if(!r.total_income && r.orig_income != null){
+      r.total_income = (r.orig_income||0)+(r.coll_fee_income||0)+(r.monthly_fee_income||0)+
+        (r.comm_fee_income||0)+(r.default_fee_income||0)+(r.mgmt_fee_income||0);
+    }
+    if(!r.total_cogs && r.comm_exp != null){
+      r.total_cogs = (r.comm_exp||0)+(r.other_cogs||0);
+    }
+    if(r.total_income != null && r.total_cogs != null && r.gross_profit == null){
+      r.gross_profit = r.total_income - r.total_cogs;
+    }
+    if(!r.total_opex && r.bank_fees != null){
+      r.total_opex = (r.bank_fees||0)+(r.office_exp||0)+(r.software_exp||0)+
+        (r.payroll_total||0)+(r.prof_fees||0)+(r.sales_mktg||0)+
+        (r.insurance||0)+(r.travel||0)+(r.utilities||0)+(r.rent||0);
+    }
+    if(r.gross_profit != null && r.total_opex != null && r.ebitda == null){
+      r.ebitda = r.gross_profit - r.total_opex;
+    }
+    if(r.ebitda != null && r.net_income == null){
+      r.net_income = r.ebitda - (r.interest_exp||0) - (r.depreciation||0) - (r.taxes||0) +
+        (r.other_income||0) - (r.other_exp||0) - (r.rd_exp||0);
+    }
+    if(r.total_income && r.gross_profit != null) r.gross_margin_pct = r.gross_profit/r.total_income;
+    if(r.total_income && r.total_opex != null) r.exp_pct_rev = r.total_opex/r.total_income;
+    if(r.total_income && r.net_income != null) r.net_income_pct = r.net_income/r.total_income;
+  }
+
+  return result; // { 'YYYY-MM': { field: value } }
+}
+
+function parseBalanceSheet(rows, period){
+  if(!rows.length || !period) return null;
+  const keys = Object.keys(rows[0]);
+  const accountCol = keys[0];
+  // Value column: find first numeric column (often the second)
+  let valueCol = keys[1];
+  for(let i=1; i<keys.length; i++){
+    const sample = rows.find(r => typeof r[keys[i]] === 'number' || (String(r[keys[i]]||'').match(/[\d\.]/)));
+    if(sample){ valueCol = keys[i]; break; }
+  }
+
+  const result = {};
+  for(const row of rows){
+    const acctRaw = String(row[accountCol]||'').trim();
+    const field = qbAccountKey(acctRaw, QB_BS_ACCOUNT_MAP);
+    if(!field) continue;
+    const raw = row[valueCol];
+    const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
+    if(!isNaN(num)) result[field] = num;
+  }
+  return result;
+}
+
+function handleFSUpload(subtype, input){
+  const file = input.files[0]; if(!file) return;
+  const statusEl = document.getElementById(`uc-fs${subtype==='pl'?'p':'b'}-status`);
+  if(statusEl) statusEl.textContent = 'Reading…';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const isCSV = file.name.match(/\.csv$/i);
+      const wb = XLSX.read(isCSV?e.target.result:e.target.result, {type:isCSV?'string':'array'});
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+
+      if(subtype === 'pl'){
+        const parsed = parsePLbyMonth(rows);
+        const periods = Object.keys(parsed);
+        if(!periods.length){
+          if(statusEl) statusEl.textContent = '⚠ No month columns recognized';
+          return;
+        }
+        // Merge into STATE.fsData (P&L fields only, preserve BS fields if already present)
+        periods.forEach(p => {
+          STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
+        });
+        // Recompute year-level aggregates for any affected years
+        const years = [...new Set(periods.map(p=>p.slice(0,4)))];
+        years.forEach(yr => {
+          const mths = Object.keys(STATE.fsData).filter(k=>k.startsWith(yr+'-')).sort();
+          if(!mths.length) return;
+          const agg = Object.assign({}, STATE.fsData[mths[mths.length-1]]||{});
+          FS_IS_SUM_FIELDS.forEach(f => { agg[f] = mths.reduce((s,k)=>s+(STATE.fsData[k]?.[f]||0), 0); });
+          if(agg.total_income){ agg.gross_margin_pct=agg.gross_profit/agg.total_income; agg.exp_pct_rev=agg.total_opex/agg.total_income; agg.net_income_pct=agg.net_income/agg.total_income; }
+          STATE.fsData[yr] = agg;
+        });
+        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} loaded`;
+      } else {
+        const period = document.getElementById('fi-fsb-period')?.value;
+        if(!period){ if(statusEl) statusEl.textContent = '⚠ Select a period first'; return; }
+        const parsed = parseBalanceSheet(rows, period);
+        if(!parsed || !Object.keys(parsed).length){
+          if(statusEl) statusEl.textContent = '⚠ No recognized accounts found';
+          return;
+        }
+        STATE.fsData[period] = Object.assign(STATE.fsData[period]||{}, parsed);
+        if(statusEl) statusEl.textContent = `✓ Balance Sheet → ${period}`;
+      }
+
+      // Update info panel
+      updateFSUploadInfo();
+      saveState();
+      const _fsd = getFilteredDeals();
+      try{ buildFSSummaryTables(_fsd); }catch(e){}
+      try{ buildFSVarianceTables(_fsd); }catch(e){};
+    } catch(err){
+      if(statusEl) statusEl.textContent = '⚠ Parse error: '+err.message;
+    }
+    input.value='';
+  };
+  const isCSV = file.name.match(/\.csv$/i);
+  if(isCSV) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+}
+
+function updateFSUploadInfo(){
+  const el = document.getElementById('fsUploadInfo');
+  const listEl = document.getElementById('fsUploadPeriodList');
+  if(!el||!listEl) return;
+  const periods = Object.keys(STATE.fsData).filter(k=>k.match(/^\d{4}-\d{2}$|^\d{4}$/)).sort();
+  if(!periods.length){ el.style.display='none'; return; }
+  el.style.display='block';
+  listEl.textContent = periods.join(', ');
 }
 
 function handleUpload(type, input){
@@ -2722,6 +2977,7 @@ function buildAllViews(){
   try { buildRecoveryTab(); } catch(e){ console.error('buildRecoveryTab error:', e); }
   try { buildComputedMetrics(deals); } catch(e){ console.error('buildComputedMetrics error:', e); }
   try { buildFSWorkbookSections(deals); } catch(e){ console.error('buildFSWorkbookSections error:', e); }
+  try { updateFSUploadInfo(); } catch(e){}
   // Pass the already-filtered dataset directly — single source of truth
   buildHistPerfTable(deals);
   buildEntityList();
@@ -3829,6 +4085,103 @@ const FS_WORKBOOK_DATA = {"2024-01":{"cash":-571939.33,"ar":1856440.24,"other_ca
 
 const FS_PERIODS_ORDERED = ['2024-01','2024-02','2024-03','2024-04','2024-05','2024-06','2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2024'];
 
+// Default QB account-name → internal field mapping (fuzzy-matched, case-insensitive)
+// P&L accounts
+const QB_PL_ACCOUNT_MAP = {
+  'origination income': 'orig_income',
+  'origination fee': 'orig_income',
+  'collection fee income': 'coll_fee_income',
+  'collection fee': 'coll_fee_income',
+  'monthly fee income': 'monthly_fee_income',
+  'monthly fee': 'monthly_fee_income',
+  'commission fee income': 'comm_fee_income',
+  'commission income': 'comm_fee_income',
+  'default fee income': 'default_fee_income',
+  'default fee': 'default_fee_income',
+  'management fee income': 'mgmt_fee_income',
+  'management fees': 'mgmt_fee_income',
+  'mgmt fee income': 'mgmt_fee_income',
+  'total income': 'total_income',
+  'total revenue': 'total_income',
+  'commission expense': 'comm_exp',
+  'commissions': 'comm_exp',
+  'commission expenses': 'comm_exp',
+  'other cogs': 'other_cogs',
+  'total cost of goods sold': 'total_cogs',
+  'total cogs': 'total_cogs',
+  'gross profit': 'gross_profit',
+  'bank fees': 'bank_fees',
+  'bank charges': 'bank_fees',
+  'merchant bank fees': 'bank_fees',
+  'office expenses': 'office_exp',
+  'office expense': 'office_exp',
+  'general and administrative': 'office_exp',
+  'software expenses': 'software_exp',
+  'software': 'software_exp',
+  'subscriptions': 'software_exp',
+  'payroll': 'payroll_total',
+  'salaries and wages': 'payroll_total',
+  'payroll expenses': 'payroll_total',
+  'professional fees': 'prof_fees',
+  'legal and professional': 'prof_fees',
+  'sales and marketing': 'sales_mktg',
+  'marketing': 'sales_mktg',
+  'insurance': 'insurance',
+  'travel': 'travel',
+  'travel and entertainment': 'travel',
+  'utilities': 'utilities',
+  'rent': 'rent',
+  'rent expense': 'rent',
+  'total operating expenses': 'total_opex',
+  'total expenses': 'total_opex',
+  'ebitda': 'ebitda',
+  'other income': 'other_income',
+  'other expense': 'other_exp',
+  'other expenses': 'other_exp',
+  'research and development': 'rd_exp',
+  'r&d': 'rd_exp',
+  'interest expense': 'interest_exp',
+  'depreciation': 'depreciation',
+  'depreciation and amortization': 'depreciation',
+  'taxes': 'taxes',
+  'income taxes': 'taxes',
+  'net income': 'net_income',
+  'net earnings': 'net_income',
+};
+
+// Balance sheet accounts
+const QB_BS_ACCOUNT_MAP = {
+  'cash': 'cash',
+  'cash and cash equivalents': 'cash',
+  'accounts receivable': 'ar',
+  'other current assets': 'other_ca',
+  'total current assets': 'total_ca',
+  'fixed assets': 'fixed_assets',
+  'property and equipment': 'fixed_assets',
+  'total non-current assets': 'total_nca',
+  'total assets': 'total_assets',
+  'accrued expenses': 'accrued_exp',
+  'accrued liabilities': 'accrued_exp',
+  'syndicator payable': 'synd_payable',
+  'syndication payable': 'synd_payable',
+  'iso payable': 'iso_payable',
+  'deferred income': 'deferred_income',
+  'deferred revenue': 'deferred_income',
+  'credit card': 'credit_card',
+  'credit cards': 'credit_card',
+  'total current liabilities': 'total_cl',
+  'total non-current liabilities': 'total_ncl',
+  'total liabilities': 'total_liab',
+  'distributions': 'distribution',
+  'retained earnings': 'retained_earnings',
+  'net income': 'net_income_bs',
+  'total equity': 'total_equity',
+  "total stockholders' equity": 'total_equity',
+  "total shareholders' equity": 'total_equity',
+  'total liabilities and equity': 'total_liab_equity',
+  'total liabilities and stockholders equity': 'total_liab_equity',
+};
+
 function fsPeriodLabel(p){
   if(!p) return '—';
   if(p === '2024') return 'FY 2024';
@@ -3859,17 +4212,17 @@ const FS_IS_SUM_FIELDS = ['orig_income','coll_fee_income','monthly_fee_income','
   'rd_exp','interest_exp','depreciation','taxes','net_income'];
 
 function getFSWbRow(periodK){
-  if(FS_WORKBOOK_DATA[periodK]) return FS_WORKBOOK_DATA[periodK];
+  if(STATE.fsData[periodK]) return STATE.fsData[periodK];
   // Quarter aggregation: sum IS fields, use end-of-quarter BS snapshot
   if(periodK && periodK.includes('-Q')){
     const [year, qStr] = periodK.split('-Q');
     const q = parseInt(qStr);
     const mMap = {1:['01','02','03'],2:['04','05','06'],3:['07','08','09'],4:['10','11','12']};
-    const months = (mMap[q]||[]).map(m=>`${year}-${m}`).filter(k=>FS_WORKBOOK_DATA[k]);
+    const months = (mMap[q]||[]).map(m=>`${year}-${m}`).filter(k=>STATE.fsData[k]);
     if(!months.length) return {};
-    const last = FS_WORKBOOK_DATA[months[months.length-1]];
+    const last = STATE.fsData[months[months.length-1]];
     const agg = Object.assign({}, last);
-    FS_IS_SUM_FIELDS.forEach(f=>{ agg[f] = months.reduce((s,k)=>s+(FS_WORKBOOK_DATA[k][f]||0), 0); });
+    FS_IS_SUM_FIELDS.forEach(f=>{ agg[f] = months.reduce((s,k)=>s+(STATE.fsData[k][f]||0), 0); });
     agg.gross_margin_pct = agg.total_income ? agg.gross_profit/agg.total_income : 0;
     agg.exp_pct_rev = agg.total_income ? agg.total_opex/agg.total_income : 0;
     agg.net_income_pct = agg.total_income ? agg.net_income/agg.total_income : 0;
