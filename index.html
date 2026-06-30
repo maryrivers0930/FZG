@@ -402,6 +402,8 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="tab" onclick="switchTab('dimensions')">🏷️ Dimensions</div>
     <div class="tab" onclick="switchTab('time')">📅 Time Analysis</div>
     <div class="tab" onclick="switchTab('recovery')">📈 Recovery Rates</div>
+    <div class="tab" onclick="switchTab('fssummary')">📋 FS Summary</div>
+    <div class="tab" onclick="switchTab('variance')">📉 Variance Analysis</div>
     <div class="tab" onclick="switchTab('upload')">📁 Data Upload</div>
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
   </div>
@@ -763,6 +765,78 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     </div>
   </div>
 
+  <!-- ===== FS SUMMARY TAB ===== -->
+  <div id="tab-fssummary" class="tab-content">
+    <!-- Period selector -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:11px;color:var(--muted);font-weight:600">Period:</label>
+        <select id="fsPeriodSel" onchange="buildFSSummary(getFilteredDeals())"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="fsSaveEdits()" style="font-size:11px">💾 Save Edits</button>
+      <span style="font-size:11px;color:var(--muted)">Enter Balance Sheet &amp; Income Statement data; Portfolio Metrics are auto-calculated from deal uploads.</span>
+    </div>
+
+    <!-- Balance Sheet -->
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-hdr"><span class="section-title">Balance Sheet</span><span class="section-sub" id="fsBSPeriod"></span></div>
+      <div class="tbl-wrap"><table class="data-tbl" id="fsBSTable" style="min-width:400px"></table></div>
+    </div>
+
+    <!-- Income Statement -->
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-hdr"><span class="section-title">Income Statement</span><span class="section-sub" id="fsISPeriod"></span></div>
+      <div class="tbl-wrap"><table class="data-tbl" id="fsISTable" style="min-width:400px"></table></div>
+    </div>
+
+    <!-- Portfolio Metrics -->
+    <div class="section">
+      <div class="section-hdr"><span class="section-title">Portfolio Metrics</span><span class="section-sub">Auto-calculated from deal data</span></div>
+      <div class="tbl-wrap"><table class="data-tbl" id="fsPMTable" style="min-width:400px"></table></div>
+    </div>
+  </div>
+
+  <!-- ===== VARIANCE ANALYSIS TAB ===== -->
+  <div id="tab-variance" class="tab-content">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:11px;color:var(--muted);font-weight:600">Current Period:</label>
+        <select id="varCurrSel" onchange="buildVarianceTab(getFilteredDeals())"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:11px;color:var(--muted);font-weight:600">vs. Prior:</label>
+        <select id="varPriorSel" onchange="buildVarianceTab(getFilteredDeals())"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer"></select>
+      </div>
+    </div>
+
+    <!-- Chart row -->
+    <div class="chart-row" style="margin-bottom:14px">
+      <div class="chart-box">
+        <div class="chart-title">Funded &amp; Collected — Period Comparison</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="varFundedChart"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Key Metrics — Period Comparison</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="varMetricsChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Portfolio Variance Table -->
+    <div class="section" style="margin-bottom:14px">
+      <div class="section-hdr"><span class="section-title">Portfolio Metrics Variance</span><span class="section-sub" id="varPortSub"></span></div>
+      <div class="tbl-wrap"><table class="data-tbl" id="varPortTable"></table></div>
+    </div>
+
+    <!-- Financial Statement Variance -->
+    <div class="section">
+      <div class="section-hdr"><span class="section-title">Financial Statement Variance</span><span class="section-sub">Based on manually entered FS Summary data</span></div>
+      <div class="tbl-wrap"><table class="data-tbl" id="varFSTable"></table></div>
+    </div>
+  </div>
+
   <!-- ===== HISTORICAL PERFORMANCE TAB ===== -->
   <div id="tab-histperf" class="tab-content active">
     <!-- Live (computed) mode selectors -->
@@ -1016,6 +1090,8 @@ let STATE = {
   filters: { dateFrom:'', dateTo:'', syndicators:[], isos:[], wls:[], dtypes:[], statuses:[], periods:[], sizeMin:'', sizeMax:'', factorMin:'', factorMax:'', merchant:'' },
   charts: {},
   _pendingUploadType: null,
+  // Manual financial data entry (Balance Sheet + Income Statement) keyed by 'YYYY-MM'
+  fsData: {},
 };
 
 function loadState(){
@@ -1026,6 +1102,7 @@ function loadState(){
     if(src){
       STATE.entities = src.entities || STATE.entities;
       STATE.activeEntityId = src.activeEntityId || STATE.entities[0]?.id;
+      if(src.fsData) STATE.fsData = src.fsData;
       // Remap any deals stuck under '__auto__' period key to their correct YYYY-MM period
       STATE.entities.forEach(ent => {
         if(!ent.dealsByPeriod || !ent.dealsByPeriod['__auto__']) return;
@@ -1047,7 +1124,7 @@ function loadState(){
   }catch(e){}
 }
 function saveState(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({entities:STATE.entities, activeEntityId:STATE.activeEntityId})); }catch(e){}
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({entities:STATE.entities, activeEntityId:STATE.activeEntityId, fsData:STATE.fsData})); }catch(e){}
 }
 function getEntity(id){ return STATE.entities.find(e=>e.id===(id||STATE.activeEntityId)); }
 function activeEntity(){ return getEntity(STATE.activeEntityId); }
@@ -2676,6 +2753,8 @@ function buildAllViews(){
   try { buildTimeTab(deals); } catch(e){ console.error('buildTimeTab error:', e); }
   try { buildRecoveryTab(); } catch(e){ console.error('buildRecoveryTab error:', e); }
   try { buildComputedMetrics(deals); } catch(e){ console.error('buildComputedMetrics error:', e); }
+  try { buildFSSummary(deals); } catch(e){ console.error('buildFSSummary error:', e); }
+  try { buildVarianceTab(deals); } catch(e){ console.error('buildVarianceTab error:', e); }
   // Pass the already-filtered dataset directly — single source of truth
   buildHistPerfTable(deals);
   buildEntityList();
@@ -3765,6 +3844,329 @@ function buildDimensionTab(deals){
 }
 
 // ============================================================
+// FS SUMMARY TAB
+// ============================================================
+const FS_BALANCE_SHEET = [
+  // [key, label, indent, isTotal, formula(d)→value]
+  // format: {key, label, indent:0-3, type:'header'|'item'|'subtotal'|'total', calc:null|fn}
+  {key:'_hdr_assets',        label:'Assets',                         type:'header'},
+  {key:'_hdr_ca',            label:'Current Assets',                 type:'header', indent:1},
+  {key:'cash',               label:'Cash and Cash Equivalents',      type:'item',   indent:2},
+  {key:'ar',                 label:'Accounts Receivable',            type:'item',   indent:2},
+  {key:'other_ca',           label:'Other Current Assets',           type:'item',   indent:2},
+  {key:'total_ca',           label:'Total Current Assets',           type:'subtotal',indent:2, calc:d=>n(d,'cash')+n(d,'ar')+n(d,'other_ca')},
+  {key:'lt_assets',          label:'Long Term Assets',               type:'item',   indent:2},
+  {key:'fixed_assets',       label:'Fixed Assets',                   type:'item',   indent:2},
+  {key:'total_nca',          label:'Total Non-Current Assets',       type:'subtotal',indent:2, calc:d=>n(d,'lt_assets')+n(d,'fixed_assets')},
+  {key:'total_assets',       label:'Total Assets',                   type:'total',  indent:1, calc:d=>n(d,'total_ca')+n(d,'total_nca')},
+  {key:'_hdr_liab',          label:'Liabilities',                    type:'header'},
+  {key:'accrued_exp',        label:'Accrued Expenses',               type:'item',   indent:2},
+  {key:'synd_payable',       label:'Syndicate Partners Payable',     type:'item',   indent:2},
+  {key:'iso_payable',        label:'ISO Commissions Payable',        type:'item',   indent:2},
+  {key:'deferred_income',    label:'Deferred Income',                type:'item',   indent:2},
+  {key:'credit_card',        label:'Credit Card',                    type:'item',   indent:2},
+  {key:'total_cc',           label:'Total for Credit Cards',         type:'subtotal',indent:2, calc:d=>n(d,'credit_card')},
+  {key:'other_cl',           label:'Other Current Liabilities',      type:'item',   indent:2},
+  {key:'total_ocl',          label:'Total Other Current Liabilities', type:'subtotal',indent:2,calc:d=>n(d,'other_cl')},
+  {key:'total_cl',           label:'Total Current Liabilities',      type:'subtotal',indent:2, calc:d=>n(d,'accrued_exp')+n(d,'synd_payable')+n(d,'iso_payable')+n(d,'deferred_income')+n(d,'total_cc')+n(d,'total_ocl')},
+  {key:'lt_liab',            label:'Long Term Liabilities',          type:'item',   indent:2},
+  {key:'total_ncl',          label:'Total Non-Current Liabilities',  type:'subtotal',indent:2, calc:d=>n(d,'lt_liab')},
+  {key:'total_liab',         label:'Total Liabilities',              type:'total',  indent:1, calc:d=>n(d,'total_cl')+n(d,'total_ncl')},
+  {key:'_hdr_equity',        label:'Equity',                         type:'header'},
+  {key:'distribution',       label:'Distribution',                   type:'item',   indent:2},
+  {key:'opening_equity',     label:'Opening Balance Equity',         type:'item',   indent:2},
+  {key:'retained_earnings',  label:'Retained Earnings',              type:'item',   indent:2},
+  {key:'net_income_bs',      label:'Net Income',                     type:'item',   indent:2},
+  {key:'total_equity',       label:'Total Equity',                   type:'subtotal',indent:2, calc:d=>n(d,'distribution')+n(d,'opening_equity')+n(d,'retained_earnings')+n(d,'net_income_bs')},
+  {key:'total_liab_equity',  label:'Total Liabilities and Equity',   type:'total',  indent:1, calc:d=>n(d,'total_equity')+n(d,'total_liab')},
+];
+
+const FS_INCOME_STMT = [
+  {key:'_hdr_income',        label:'Income',                         type:'header'},
+  {key:'advance_income',     label:'Advance Income',                 type:'item',   indent:2},
+  {key:'orig_income',        label:'Origination Income',             type:'item',   indent:2},
+  {key:'coll_fee_income',    label:'Collection Fee Income',          type:'item',   indent:2},
+  {key:'monthly_fee_income', label:'Monthly Fee Income',             type:'item',   indent:2},
+  {key:'comm_fee_income',    label:'Commission Fee Income',          type:'item',   indent:2},
+  {key:'default_fee_income', label:'Default Fee Income',             type:'item',   indent:2},
+  {key:'mgmt_fee_income',    label:'Management Fee Income',          type:'item',   indent:2},
+  {key:'total_income',       label:'Total Income',                   type:'subtotal',indent:1, calc:d=>n(d,'advance_income')+n(d,'orig_income')+n(d,'coll_fee_income')+n(d,'monthly_fee_income')+n(d,'comm_fee_income')+n(d,'default_fee_income')+n(d,'mgmt_fee_income')},
+  {key:'_hdr_cogs',          label:'Cost of Goods Sold',             type:'header'},
+  {key:'comm_exp',           label:'Commission Expenses',            type:'item',   indent:2},
+  {key:'other_cogs',         label:'Other Cost of Goods Sold',       type:'item',   indent:2},
+  {key:'total_cogs',         label:'Total Cost of Goods Sold',       type:'subtotal',indent:1, calc:d=>n(d,'comm_exp')+n(d,'other_cogs')},
+  {key:'gross_profit',       label:'Gross Profit',                   type:'total',  indent:1, calc:d=>n(d,'total_income')-n(d,'total_cogs')},
+  {key:'gross_margin_pct',   label:'Gross Margin %',                 type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'gross_profit')/n(d,'total_income'):0},
+  {key:'_hdr_opex',          label:'Operating Expenses',             type:'header'},
+  {key:'bank_fees',          label:'Bank Fees & Service Charges',    type:'item',   indent:2},
+  {key:'office_exp',         label:'Office Expenses',                type:'item',   indent:2},
+  {key:'software_exp',       label:'Software Expense',               type:'item',   indent:2},
+  {key:'payroll_total',      label:'Total Payroll & Related Expenses',type:'item',  indent:2},
+  {key:'prof_fees',          label:'Professional Fees',              type:'item',   indent:2},
+  {key:'sales_mktg',         label:'Sales & Marketing Expenses',     type:'item',   indent:2},
+  {key:'travel',             label:'Transportation and Travel',       type:'item',   indent:2},
+  {key:'rent',               label:'Rent Expenses',                  type:'item',   indent:2},
+  {key:'total_opex',         label:'Total Operating Expenses',       type:'subtotal',indent:1, calc:d=>n(d,'bank_fees')+n(d,'office_exp')+n(d,'software_exp')+n(d,'payroll_total')+n(d,'prof_fees')+n(d,'sales_mktg')+n(d,'travel')+n(d,'rent')},
+  {key:'exp_pct_rev',        label:'Expenses % of Revenue',          type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'total_opex')/n(d,'total_income'):0},
+  {key:'ebitda',             label:'EBITDA',                         type:'total',  indent:1, calc:d=>n(d,'gross_profit')-n(d,'total_opex')},
+  {key:'_hdr_other',         label:'Below-the-Line',                 type:'header'},
+  {key:'other_income',       label:'Other Income',                   type:'item',   indent:2},
+  {key:'other_exp',          label:'Other Expenses',                 type:'item',   indent:2},
+  {key:'rd_exp',             label:'Research & Development',         type:'item',   indent:2},
+  {key:'interest_exp',       label:'Interest Expense',               type:'item',   indent:2},
+  {key:'depreciation',       label:'Depreciation',                   type:'item',   indent:2},
+  {key:'taxes',              label:'Taxes',                          type:'item',   indent:2},
+  {key:'net_income',         label:'Net Income',                     type:'total',  indent:1, calc:d=>n(d,'ebitda')+n(d,'other_income')-n(d,'other_exp')-n(d,'rd_exp')-n(d,'taxes')-n(d,'interest_exp')-n(d,'depreciation')},
+  {key:'net_income_pct',     label:'Net Income % of Revenue',        type:'pct',    indent:1, calc:d=>n(d,'total_income')?n(d,'net_income')/n(d,'total_income'):0},
+];
+
+function n(data, key){ return parseFloat(data[key]||0)||0; }
+function fsResolve(rows, data){
+  // Build a virtual data object with calculated fields
+  const d = Object.assign({}, data);
+  rows.forEach(r=>{ if(r.calc) d[r.key] = r.calc(d); });
+  return d;
+}
+
+let FS_EDITING = false;
+
+function fsSaveEdits(){
+  const period = document.getElementById('fsPeriodSel')?.value;
+  if(!period){ alert('Select a period first'); return; }
+  if(!STATE.fsData[period]) STATE.fsData[period] = {};
+  // Collect all editable inputs
+  document.querySelectorAll('[data-fs-field]').forEach(el=>{
+    const key = el.dataset.fsField;
+    const raw = el.value.replace(/[^0-9.\-]/g,'');
+    STATE.fsData[period][key] = raw ? parseFloat(raw) : 0;
+  });
+  saveState();
+  buildFSSummary(getFilteredDeals());
+}
+
+function buildFSSummary(deals){
+  // Populate period selector
+  const allPeriods = [...new Set(deals.map(d=>d.fundedDate?.slice(0,7)).filter(Boolean))].sort().reverse();
+  const sel = document.getElementById('fsPeriodSel');
+  if(!sel) return;
+  const prevVal = sel.value;
+  sel.innerHTML = allPeriods.map(p=>`<option value="${p}" ${p===prevVal?'selected':''}>${p}</option>`).join('');
+  if(!sel.value && allPeriods.length) sel.value = allPeriods[0];
+  const period = sel.value || '';
+  const periodLabel = period ? new Date(period+'-15').toLocaleDateString('en-US',{month:'short',year:'numeric'}) : '—';
+  document.getElementById('fsBSPeriod').textContent = periodLabel;
+  document.getElementById('fsISPeriod').textContent = periodLabel;
+
+  const raw = STATE.fsData[period] || {};
+
+  function renderFSTable(tableId, rows){
+    const resolved = fsResolve(rows, raw);
+    const tbl = document.getElementById(tableId);
+    if(!tbl) return;
+    const isMoney = key => !key.endsWith('_pct');
+    tbl.innerHTML = `<thead><tr><th style="width:60%">Line Item</th><th style="width:20%;text-align:right">Amount</th><th style="width:20%;text-align:right">Notes</th></tr></thead>
+    <tbody>${rows.map(r=>{
+      if(r.type==='header') return `<tr style="background:rgba(139,92,246,.08)"><td colspan="3" style="font-weight:700;font-size:11px;color:var(--purple);padding-left:${(r.indent||0)*14}px;text-transform:uppercase;letter-spacing:.5px">${r.label}</td></tr>`;
+      const val = resolved[r.key] || 0;
+      const isCalc = !!r.calc;
+      const isPct = r.type === 'pct';
+      const isTotal = r.type==='total' || r.type==='subtotal';
+      const dispVal = isPct ? (val*100).toFixed(1)+'%' : fmt$(val);
+      const fmtClass = isTotal?'font-weight:700':'';
+      const bgStyle = r.type==='total'?'background:rgba(88,166,255,.06)':r.type==='subtotal'?'background:rgba(30,35,50,.5)':'';
+      const colorStyle = isTotal?'color:var(--blue)':r.type==='subtotal'?'color:var(--text)':'color:var(--muted)';
+      const inputHtml = isCalc ? `<span style="${fmtClass};${colorStyle}">${dispVal}</span>`
+        : `<input data-fs-field="${r.key}" value="${val||''}" placeholder="0"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:2px 6px;width:120px;text-align:right;font-weight:${isTotal?'700':'400'}"
+            oninput="this.form&&this.form.reportValidity()" />`;
+      return `<tr style="${bgStyle}">
+        <td style="padding-left:${(r.indent||0)*14+4}px;font-weight:${isTotal?'700':'400'}">${r.label}</td>
+        <td style="text-align:right">${inputHtml}</td>
+        <td style="text-align:right;color:var(--muted);font-size:10px">${isCalc?'auto':''}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
+  }
+
+  renderFSTable('fsBSTable', FS_BALANCE_SHEET);
+  renderFSTable('fsISTable', FS_INCOME_STMT);
+
+  // Portfolio Metrics — auto-calculated from deal data for selected period
+  const periodDeals = deals.filter(d=>d.fundedDate?.slice(0,7)===period);
+  const totalFunded  = periodDeals.reduce((a,d)=>a+d.amount,0);
+  const totalRTR     = periodDeals.reduce((a,d)=>a+d.rtr,0);
+  const totalColl    = periodDeals.reduce((a,d)=>a+d.collected,0);
+  const totalRem     = periodDeals.reduce((a,d)=>a+d.remaining,0);
+  const totalMgmt    = periodDeals.reduce((a,d)=>a+(d.mgmtFee||0),0);
+  const totalComm    = periodDeals.reduce((a,d)=>a+(d.commission||0),0);
+  const totalDisc    = periodDeals.reduce((a,d)=>a+(d.discounts||0),0);
+  const totalWriteOff= periodDeals.reduce((a,d)=>a+(d.writeOff||0),0);
+  const dealCount    = periodDeals.length;
+  const avgSize      = dealCount ? totalFunded/dealCount : 0;
+  const avgFactor    = periodDeals.filter(d=>d.factor>0).length ? periodDeals.reduce((a,d)=>a+d.factor,0)/periodDeals.filter(d=>d.factor>0).length : 0;
+  const avgTerm      = periodDeals.filter(d=>d.term>0).length ? periodDeals.reduce((a,d)=>a+d.term,0)/periodDeals.filter(d=>d.term>0).length : 0;
+  const recRate      = calcRecRate(totalColl, totalFunded, totalComm, 0);
+  const statusCounts = {};
+  const defaultStatuses = ['collection','in - house collections','bankruptcy','legal','in house legal','under - performing','syndication default'];
+  periodDeals.forEach(d=>{
+    const s = (d.status||'Unknown').toLowerCase();
+    statusCounts[s] = (statusCounts[s]||0)+1;
+  });
+  const totalDefault = defaultStatuses.reduce((a,s)=>a+(statusCounts[s]||0),0);
+
+  const mRow = (label, val, fmt) => `<tr><td style="color:var(--muted)">${label}</td><td style="text-align:right;font-weight:600">${fmt?fmt(val):val}</td></tr>`;
+  const sep  = (label) => `<tr style="background:rgba(139,92,246,.08)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">${label}</td></tr>`;
+
+  const tbl = document.getElementById('fsPMTable');
+  if(tbl) tbl.innerHTML = `<thead><tr><th style="width:60%">Metric</th><th style="text-align:right;width:40%">Value</th></tr></thead><tbody>
+    ${sep('Funding')}
+    ${mRow('Funded',totalFunded,fmtFull$)}
+    ${mRow('Funded Units',dealCount)}
+    ${mRow('Avg Deal Size',avgSize,fmtFull$)}
+    ${mRow('Avg Factor Rate',avgFactor,v=>v?v.toFixed(4):'—')}
+    ${mRow('Avg Deal Length (days)',avgTerm,v=>v?Math.round(v)+'d':'—')}
+    ${mRow('Commissions',totalComm,fmtFull$)}
+    ${mRow('Commissions % of Funded',totalFunded?totalComm/totalFunded:0,v=>(v*100).toFixed(2)+'%')}
+    ${sep('Collections')}
+    ${mRow('Total RTR',totalRTR,fmtFull$)}
+    ${mRow('Collected Amount',totalColl,fmtFull$)}
+    ${mRow('Management Fees',totalMgmt,fmtFull$)}
+    ${mRow('Discounts',totalDisc,fmtFull$)}
+    ${mRow('Write-Offs',totalWriteOff,fmtFull$)}
+    ${mRow('Remaining RTR',totalRem,fmtFull$)}
+    ${sep('Performance')}
+    ${mRow('Recovery Rate',recRate,v=>v?(v*100).toFixed(2)+'%':'—')}
+    ${mRow('Total in Default',totalDefault)}
+    ${mRow('Default Rate %',dealCount?totalDefault/dealCount:0,v=>(v*100).toFixed(1)+'%')}
+    ${sep('Deal Status Breakdown')}
+    ${Object.entries(statusCounts).sort((a,b)=>b[1]-a[1]).map(([s,c])=>mRow(s.charAt(0).toUpperCase()+s.slice(1),c)).join('')}
+  </tbody>`;
+}
+
+// ============================================================
+// VARIANCE ANALYSIS TAB
+// ============================================================
+function buildVarianceTab(deals){
+  // Populate period selectors
+  const allPeriods = [...new Set(deals.map(d=>d.fundedDate?.slice(0,7)).filter(Boolean))].sort().reverse();
+  const currSel = document.getElementById('varCurrSel');
+  const priorSel = document.getElementById('varPriorSel');
+  if(!currSel || !priorSel) return;
+
+  const prevCurr = currSel.value;
+  const prevPrior = priorSel.value;
+  currSel.innerHTML  = allPeriods.map(p=>`<option value="${p}">${p}</option>`).join('');
+  priorSel.innerHTML = allPeriods.map(p=>`<option value="${p}">${p}</option>`).join('');
+  if(prevCurr && allPeriods.includes(prevCurr)) currSel.value = prevCurr;
+  else if(allPeriods.length) currSel.value = allPeriods[0];
+  if(prevPrior && allPeriods.includes(prevPrior)) priorSel.value = prevPrior;
+  else if(allPeriods.length>1) priorSel.value = allPeriods[1];
+
+  const currP  = currSel.value;
+  const priorP = priorSel.value;
+  const lbl = p => p ? new Date(p+'-15').toLocaleDateString('en-US',{month:'short',year:'numeric'}) : '—';
+  document.getElementById('varPortSub').textContent = `${lbl(currP)} vs ${lbl(priorP)}`;
+
+  const dealsC = deals.filter(d=>d.fundedDate?.slice(0,7)===currP);
+  const dealsP = deals.filter(d=>d.fundedDate?.slice(0,7)===priorP);
+
+  function pm(ds){
+    const funded  = ds.reduce((a,d)=>a+d.amount,0);
+    const rtr     = ds.reduce((a,d)=>a+d.rtr,0);
+    const coll    = ds.reduce((a,d)=>a+d.collected,0);
+    const rem     = ds.reduce((a,d)=>a+d.remaining,0);
+    const mgmt    = ds.reduce((a,d)=>a+(d.mgmtFee||0),0);
+    const comm    = ds.reduce((a,d)=>a+(d.commission||0),0);
+    const disc    = ds.reduce((a,d)=>a+(d.discounts||0),0);
+    const wo      = ds.reduce((a,d)=>a+(d.writeOff||0),0);
+    const cnt     = ds.length;
+    const factDs  = ds.filter(d=>d.factor>0);
+    const avgF    = factDs.length ? ds.reduce((a,d)=>a+d.factor,0)/factDs.length : 0;
+    const termDs  = ds.filter(d=>d.term>0);
+    const avgT    = termDs.length ? ds.reduce((a,d)=>a+d.term,0)/termDs.length : 0;
+    const rec     = calcRecRate(coll, funded, comm, 0);
+    return {funded,rtr,coll,rem,mgmt,comm,disc,wo,cnt,avgF,avgT,rec,avgSize:cnt?funded/cnt:0};
+  }
+
+  const C = pm(dealsC), P = pm(dealsP);
+
+  // Charts
+  makeChart('varFundedChart','bar',{
+    labels:[lbl(priorP), lbl(currP)],
+    datasets:[
+      {label:'Funded',      data:[P.funded, C.funded],      backgroundColor:['rgba(88,166,255,.5)','rgba(88,166,255,.9)'],  borderRadius:4},
+      {label:'Collected',   data:[P.coll,   C.coll],        backgroundColor:['rgba(63,185,80,.5)', 'rgba(63,185,80,.9)'],   borderRadius:4},
+      {label:'Remaining',   data:[P.rem,    C.rem],         backgroundColor:['rgba(240,136,62,.5)','rgba(240,136,62,.9)'],  borderRadius:4},
+    ]
+  },{yFmt:v=>fmt$(v)});
+  makeChart('varMetricsChart','bar',{
+    labels:[lbl(priorP), lbl(currP)],
+    datasets:[
+      {label:'Deals',        data:[P.cnt,    C.cnt],         backgroundColor:['rgba(167,139,250,.5)','rgba(167,139,250,.9)'],borderRadius:4,yAxisID:'y'},
+      {label:'Recovery Rate',data:[P.rec*100,C.rec*100],     type:'line',borderColor:'#3fb950',pointRadius:5,borderWidth:2,  yAxisID:'y2'},
+    ]
+  },{y2:true, yFmt:v=>v.toFixed(0), y2Fmt:v=>v.toFixed(1)+'%'});
+
+  function varRow(label, curr, prior, fmtFn, higherIsBetter=true){
+    const diff = curr - prior;
+    const pct  = prior !== 0 ? diff/Math.abs(prior) : (curr!==0?1:0);
+    const dir  = diff > 0 ? (higherIsBetter ? 'up' : 'down') : diff < 0 ? (higherIsBetter ? 'down' : 'up') : 'neu';
+    const arrow= diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
+    const f    = fmtFn || (v=>v.toFixed(0));
+    return `<tr>
+      <td>${label}</td>
+      <td style="text-align:right">${f(curr)}</td>
+      <td style="text-align:right;color:var(--muted)">${f(prior)}</td>
+      <td style="text-align:right">${fmtFull$(diff)}</td>
+      <td class="${dir}" style="text-align:right">${arrow} ${prior!==0?(Math.abs(pct)*100).toFixed(1)+'%':'N/A'}</td>
+    </tr>`;
+  }
+  function varHdr(label){
+    return `<tr style="background:rgba(139,92,246,.08)"><td colspan="5" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">${label}</td></tr>`;
+  }
+  const hdr = `<thead><tr><th>Metric</th><th style="text-align:right">${lbl(currP)}</th><th style="text-align:right;color:var(--muted)">${lbl(priorP)}</th><th style="text-align:right">$ Change</th><th style="text-align:right">% Change</th></tr></thead>`;
+
+  document.getElementById('varPortTable').innerHTML = hdr + `<tbody>
+    ${varHdr('Deal Volume')}
+    ${varRow('# Deals',C.cnt,P.cnt,v=>v.toFixed(0))}
+    ${varRow('Total Funded',C.funded,P.funded,fmtFull$)}
+    ${varRow('Avg Deal Size',C.avgSize,P.avgSize,fmtFull$)}
+    ${varRow('Avg Factor Rate',C.avgF,P.avgF,v=>v?v.toFixed(4):'0',false)}
+    ${varRow('Avg Term (days)',C.avgT,P.avgT,v=>v?Math.round(v)+'d':'0d',true)}
+    ${varHdr('Collections')}
+    ${varRow('Total RTR',C.rtr,P.rtr,fmtFull$)}
+    ${varRow('Collected',C.coll,P.coll,fmtFull$)}
+    ${varRow('Remaining RTR',C.rem,P.rem,fmtFull$,false)}
+    ${varRow('Management Fees',C.mgmt,P.mgmt,fmtFull$)}
+    ${varRow('Commissions',C.comm,P.comm,fmtFull$,false)}
+    ${varRow('Discounts',C.disc,P.disc,fmtFull$,false)}
+    ${varHdr('Performance')}
+    ${varRow('Recovery Rate',C.rec*100,P.rec*100,v=>v.toFixed(2)+'%')}
+  </tbody>`;
+
+  // Financial Statement Variance (from manually entered FS data)
+  const fsC = STATE.fsData[currP] || {};
+  const fsP = STATE.fsData[priorP] || {};
+  const resolvedC = fsResolve([...FS_BALANCE_SHEET,...FS_INCOME_STMT], fsC);
+  const resolvedP = fsResolve([...FS_BALANCE_SHEET,...FS_INCOME_STMT], fsP);
+  const fsVarRows = [
+    ...FS_INCOME_STMT.filter(r=>r.type==='total'||r.type==='subtotal'||r.type==='pct'),
+    ...FS_BALANCE_SHEET.filter(r=>r.type==='total'),
+  ];
+
+  const hasFS = Object.keys(fsC).length > 0 || Object.keys(fsP).length > 0;
+  document.getElementById('varFSTable').innerHTML = hasFS ? (hdr + `<tbody>${
+    fsVarRows.map(r=>{
+      if(!r.calc) return '';
+      const cval = resolvedC[r.key]||0;
+      const pval = resolvedP[r.key]||0;
+      const isPct = r.type==='pct';
+      const fmtFn = isPct ? v=>(v*100).toFixed(1)+'%' : fmtFull$;
+      return varHdr(r.label) === r ? '' : varRow(r.label, cval, pval, fmtFn);
+    }).join('')
+  }</tbody>`) : `<tbody><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Enter Balance Sheet &amp; Income Statement data in the <a href="#" onclick="switchTab('fssummary');return false" style="color:var(--purple)">FS Summary</a> tab to see financial variance.</td></tr></tbody>`;
+}
+
+// ============================================================
 // TIME ANALYSIS TAB
 // ============================================================
 function buildTimeTab(deals){
@@ -4453,11 +4855,13 @@ function switchTab(t){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const tc=document.getElementById('tab-'+t); if(tc) tc.classList.add('active');
-  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','upload','share'];
+  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','fssummary','variance','upload','share'];
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
+  if(t==='fssummary') buildFSSummary(getFilteredDeals());
+  if(t==='variance') buildVarianceTab(getFilteredDeals());
   if(t==='recovery') requestAnimationFrame(()=>{
     try{ buildRecoveryTab(); }
     catch(e){
