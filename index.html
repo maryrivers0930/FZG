@@ -1135,10 +1135,6 @@ function activeEntity(){ return getEntity(STATE.activeEntityId); }
 // INIT
 // ============================================================
 loadState();
-// Seed STATE.fsData with 2024 workbook defaults if the user hasn't uploaded any financial statements yet
-if(Object.keys(STATE.fsData).length === 0){
-  STATE.fsData = Object.assign({}, FS_WORKBOOK_DATA);
-}
 document.addEventListener('DOMContentLoaded', ()=>{
   // Migrate old format: if entity has .deals[] but no .dealsByPeriod, migrate
   STATE.entities.forEach(ent=>{
@@ -1176,6 +1172,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       {period:'2026-04',rate:1.1019,rtr:0,collected:0,defaultAmt:0},
       {period:'2026-05',rate:1.1073,rtr:8332754,collected:6704603,defaultAmt:1043761},
     ];
+  }
+  // Seed STATE.fsData with 2024 workbook defaults if no financial statements have been uploaded yet
+  if(Object.keys(STATE.fsData).length === 0){
+    STATE.fsData = Object.assign({}, FS_WORKBOOK_DATA);
   }
   buildEntitySel();
   buildEntityList();
