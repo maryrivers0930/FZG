@@ -896,8 +896,9 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
             <div class="uc-status" id="uc-fsb-status"></div>
           </div>
         </div>
-        <div id="fsUploadInfo" style="font-size:10px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;display:none">
-          <b style="color:var(--text)">Loaded periods:</b> <span id="fsUploadPeriodList">—</span>
+        <div id="fsUploadInfo" style="font-size:10px;color:var(--muted);margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;display:none;align-items:center;justify-content:space-between;gap:8px">
+          <div><b style="color:var(--text)">Loaded periods:</b> <span id="fsUploadPeriodList">—</span></div>
+          <button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--red);flex-shrink:0" onclick="clearFSData()">Clear FS Data</button>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px">
           QB account names are matched automatically. Unrecognized accounts are ignored — upload again after renaming accounts in QB if needed.
@@ -1290,12 +1291,24 @@ function triggerPeriodUpload(){
 // QB FINANCIAL STATEMENT PARSERS
 // ============================================================
 
+function normalizeAcctName(s){
+  return (s||'').toLowerCase()
+    .replace(/&/g,'and')
+    .replace(/[^\w\s]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
 function qbAccountKey(name, map){
-  const k = (name||'').toLowerCase().trim().replace(/\s+/g,' ');
-  if(map[k]) return map[k];
-  // partial match: check if any map key starts with or is contained in k
-  for(const mk of Object.keys(map)){
-    if(k === mk || k.startsWith(mk) || mk.startsWith(k)) return map[mk];
+  const k = normalizeAcctName(name);
+  if(!k) return null;
+  // 1. Exact match
+  const normMap = {};
+  for(const mk of Object.keys(map)) normMap[normalizeAcctName(mk)] = map[mk];
+  if(normMap[k]) return normMap[k];
+  // 2. Map key is a substring of account name
+  for(const nk of Object.keys(normMap)){
+    if(k.includes(nk) || nk.includes(k)) return normMap[nk];
   }
   return null;
 }
@@ -1323,90 +1336,162 @@ function parseQBMonthHeader(cell){
   return null;
 }
 
-function parsePLbyMonth(rows){
-  // rows is an array of objects from XLSX.utils.sheet_to_json
-  // Find the header row: the row whose keys include month-like values
-  // QB exports: first column = account name, rest = months + "Total"
-  if(!rows.length) return {};
+// Parse a raw number cell from QB exports (handles currency strings and parentheses for negatives)
+function parseQBNum(raw){
+  if(raw === '' || raw == null) return null;
+  if(typeof raw === 'number') return raw;
+  const s = String(raw).replace(/[$,\s]/g,'').replace(/^\((.+)\)$/,'-$1');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
 
-  // Get column keys
-  const keys = Object.keys(rows[0]);
-  const accountCol = keys[0]; // first column is always account name
-
-  // Identify month columns
-  const monthCols = []; // [{key, period}]
-  for(let i=1; i<keys.length; i++){
-    // Try the column header itself
-    const p = parseQBMonthHeader(keys[i]);
-    if(p) { monthCols.push({key:keys[i], period:p}); continue; }
-    // Sometimes the value in row 0 contains the month name
-    const cellVal = rows[0][keys[i]];
-    const p2 = parseQBMonthHeader(cellVal);
-    if(p2) monthCols.push({key:keys[i], period:p2});
+// Derive computed fields for a parsed period object
+function fsDerive(r){
+  if(r.total_income == null && (r.orig_income != null || r.mgmt_fee_income != null)){
+    r.total_income = (r.orig_income||0)+(r.coll_fee_income||0)+(r.monthly_fee_income||0)+
+      (r.comm_fee_income||0)+(r.default_fee_income||0)+(r.mgmt_fee_income||0);
   }
-
-  // If no month cols found from headers, try scanning all rows for a header row
-  if(!monthCols.length){
-    for(const row of rows){
-      const vals = Object.values(row);
-      let found = 0;
-      const candidates = [];
-      for(let i=1; i<keys.length; i++){
-        const p = parseQBMonthHeader(row[keys[i]]);
-        if(p){ found++; candidates.push({key:keys[i], period:p}); }
-      }
-      if(found >= 2){ monthCols.push(...candidates); break; }
-    }
+  if(r.total_cogs == null && r.comm_exp != null){
+    r.total_cogs = (r.comm_exp||0)+(r.other_cogs||0);
   }
+  if(r.gross_profit == null && r.total_income != null && r.total_cogs != null){
+    r.gross_profit = r.total_income - r.total_cogs;
+  }
+  if(r.total_opex == null){
+    const expSum = (r.bank_fees||0)+(r.office_exp||0)+(r.software_exp||0)+
+      (r.payroll_total||0)+(r.prof_fees||0)+(r.sales_mktg||0)+
+      (r.insurance||0)+(r.travel||0)+(r.utilities||0)+(r.rent||0);
+    if(expSum !== 0) r.total_opex = expSum;
+  }
+  if(r.ebitda == null && r.gross_profit != null && r.total_opex != null){
+    r.ebitda = r.gross_profit - r.total_opex;
+  }
+  if(r.net_income == null && r.ebitda != null){
+    r.net_income = r.ebitda - (r.interest_exp||0) - (r.depreciation||0) - (r.taxes||0) +
+      (r.other_income||0) - (r.other_exp||0) - (r.rd_exp||0);
+  }
+  if(r.total_income){
+    if(r.gross_profit  != null) r.gross_margin_pct = r.gross_profit/r.total_income;
+    if(r.total_opex    != null) r.exp_pct_rev = r.total_opex/r.total_income;
+    if(r.net_income    != null) r.net_income_pct = r.net_income/r.total_income;
+  }
+}
 
-  if(!monthCols.length) return {};
+// Parse a QB "Profit and Loss by Month" export.
+// Accepts raw 2D array (from XLSX.utils.sheet_to_json with {header:1}).
+// Returns { 'YYYY-MM': { fieldName: value, ... }, ... } and _unmapped array.
+function parsePLbyMonth(rawRows){
+  if(!rawRows || !rawRows.length) return {};
 
-  // Build result: { 'YYYY-MM': { field: value, ... } }
+  // Find the header row: the row with the most parseable month values
+  let headerRowIdx = -1, maxMonths = 0;
+  rawRows.forEach((row, i) => {
+    let cnt = 0;
+    (row||[]).forEach(cell => { if(parseQBMonthHeader(cell)) cnt++; });
+    if(cnt > maxMonths){ maxMonths = cnt; headerRowIdx = i; }
+  });
+  if(headerRowIdx === -1 || maxMonths < 1) return {};
+
+  const headerRow = rawRows[headerRowIdx];
+  const periodCols = []; // {colIdx, period}
+  headerRow.forEach((cell, i) => {
+    if(i === 0) return;
+    const p = parseQBMonthHeader(cell);
+    if(p) periodCols.push({colIdx: i, period: p});
+  });
+  if(!periodCols.length) return {};
+
   const result = {};
-  monthCols.forEach(mc => { result[mc.period] = {}; });
+  const unmapped = [];
+  periodCols.forEach(pc => { result[pc.period] = {}; });
 
-  for(const row of rows){
-    const acctRaw = String(row[accountCol]||'').trim();
+  for(let ri = headerRowIdx + 1; ri < rawRows.length; ri++){
+    const row = rawRows[ri] || [];
+    const acctRaw = String(row[0]||'').trim();
+    if(!acctRaw) continue;
     const field = qbAccountKey(acctRaw, QB_PL_ACCOUNT_MAP);
-    if(!field) continue;
-    for(const mc of monthCols){
-      const raw = row[mc.key];
-      const num = typeof raw==='number' ? raw : parseFloat(String(raw||'').replace(/[$,\(\)]/g,'').replace(/\((.+)\)/,'-$1'));
-      if(!isNaN(num)) result[mc.period][field] = num;
+    if(!field){
+      // Only log non-total, non-blank, non-section-header rows as unmapped
+      const norm = normalizeAcctName(acctRaw);
+      if(norm && !norm.startsWith('total') && norm.length > 3) unmapped.push(acctRaw);
+      continue;
+    }
+    for(const pc of periodCols){
+      const num = parseQBNum(row[pc.colIdx]);
+      if(num !== null) result[pc.period][field] = num;
     }
   }
 
-  // Derive computed fields for each period
-  for(const p of Object.keys(result)){
-    const r = result[p];
-    if(!r.total_income && r.orig_income != null){
-      r.total_income = (r.orig_income||0)+(r.coll_fee_income||0)+(r.monthly_fee_income||0)+
-        (r.comm_fee_income||0)+(r.default_fee_income||0)+(r.mgmt_fee_income||0);
+  Object.values(result).forEach(r => fsDerive(r));
+  result._unmapped = [...new Set(unmapped)];
+  return result;
+}
+
+// Parse a QB "Balance Sheet" export (multi-period or single-period).
+// Returns { 'YYYY-MM': { fieldName: value, ... }, ..., _unmapped: [...] }
+// or { _flat: { fieldName: value, ... } } if no period headers detected.
+function parseBalanceSheet(rawRows){
+  if(!rawRows || !rawRows.length) return {};
+
+  // Find the header row: most parseable month values
+  let headerRowIdx = -1, maxMonths = 0;
+  rawRows.forEach((row, i) => {
+    let cnt = 0;
+    (row||[]).forEach(cell => { if(parseQBMonthHeader(cell)) cnt++; });
+    if(cnt > maxMonths){ maxMonths = cnt; headerRowIdx = i; }
+  });
+
+  const unmapped = [];
+
+  if(headerRowIdx === -1 || maxMonths < 1){
+    // Single-column snapshot — find the first numeric column
+    const flat = {};
+    for(let ri = 0; ri < rawRows.length; ri++){
+      const row = rawRows[ri]||[];
+      const acctRaw = String(row[0]||'').trim();
+      if(!acctRaw) continue;
+      const field = qbAccountKey(acctRaw, QB_BS_ACCOUNT_MAP);
+      const num = parseQBNum(row[1]);
+      if(field && num !== null) flat[field] = num;
+      else if(!field && num !== null){
+        const norm = normalizeAcctName(acctRaw);
+        if(norm && !norm.startsWith('total') && norm.length > 3) unmapped.push(acctRaw);
+      }
     }
-    if(!r.total_cogs && r.comm_exp != null){
-      r.total_cogs = (r.comm_exp||0)+(r.other_cogs||0);
-    }
-    if(r.total_income != null && r.total_cogs != null && r.gross_profit == null){
-      r.gross_profit = r.total_income - r.total_cogs;
-    }
-    if(!r.total_opex && r.bank_fees != null){
-      r.total_opex = (r.bank_fees||0)+(r.office_exp||0)+(r.software_exp||0)+
-        (r.payroll_total||0)+(r.prof_fees||0)+(r.sales_mktg||0)+
-        (r.insurance||0)+(r.travel||0)+(r.utilities||0)+(r.rent||0);
-    }
-    if(r.gross_profit != null && r.total_opex != null && r.ebitda == null){
-      r.ebitda = r.gross_profit - r.total_opex;
-    }
-    if(r.ebitda != null && r.net_income == null){
-      r.net_income = r.ebitda - (r.interest_exp||0) - (r.depreciation||0) - (r.taxes||0) +
-        (r.other_income||0) - (r.other_exp||0) - (r.rd_exp||0);
-    }
-    if(r.total_income && r.gross_profit != null) r.gross_margin_pct = r.gross_profit/r.total_income;
-    if(r.total_income && r.total_opex != null) r.exp_pct_rev = r.total_opex/r.total_income;
-    if(r.total_income && r.net_income != null) r.net_income_pct = r.net_income/r.total_income;
+    flat._unmapped = [...new Set(unmapped)];
+    return {_flat: flat};
   }
 
-  return result; // { 'YYYY-MM': { field: value } }
+  const headerRow = rawRows[headerRowIdx];
+  const periodCols = [];
+  headerRow.forEach((cell, i) => {
+    if(i === 0) return;
+    const p = parseQBMonthHeader(cell);
+    if(p) periodCols.push({colIdx: i, period: p});
+  });
+  if(!periodCols.length) return {};
+
+  const result = {};
+  periodCols.forEach(pc => { result[pc.period] = {}; });
+
+  for(let ri = headerRowIdx + 1; ri < rawRows.length; ri++){
+    const row = rawRows[ri]||[];
+    const acctRaw = String(row[0]||'').trim();
+    if(!acctRaw) continue;
+    const field = qbAccountKey(acctRaw, QB_BS_ACCOUNT_MAP);
+    if(!field){
+      const norm = normalizeAcctName(acctRaw);
+      if(norm && !norm.startsWith('total') && norm.length > 3) unmapped.push(acctRaw);
+      continue;
+    }
+    for(const pc of periodCols){
+      const num = parseQBNum(row[pc.colIdx]);
+      if(num !== null) result[pc.period][field] = num;
+    }
+  }
+
+  result._unmapped = [...new Set(unmapped)];
+  return result;
 }
 
 function parseBalanceSheet(rows){
@@ -1482,54 +1567,78 @@ function handleFSUpload(subtype, input){
   reader.onload = e => {
     try{
       const isCSV = file.name.match(/\.csv$/i);
-      const wb = XLSX.read(isCSV?e.target.result:e.target.result, {type:isCSV?'string':'array'});
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+      const xlWb = XLSX.read(isCSV ? e.target.result : e.target.result,
+                             {type: isCSV ? 'string' : 'array'});
+      // Use raw 2D arrays (header:1) so we control header-row detection
+      const rawRows = XLSX.utils.sheet_to_json(xlWb.Sheets[xlWb.SheetNames[0]],
+                                               {header:1, defval:''});
 
       if(subtype === 'pl'){
-        const parsed = parsePLbyMonth(rows);
-        const periods = Object.keys(parsed);
+        const parsed = parsePLbyMonth(rawRows);
+        const unmapped = parsed._unmapped || [];
+        delete parsed._unmapped;
+        const periods = Object.keys(parsed).filter(k => k.match(/^\d{4}-\d{2}$/));
         if(!periods.length){
-          if(statusEl) statusEl.textContent = '⚠ No month columns recognized';
+          if(statusEl) statusEl.textContent = '⚠ No month columns found. Is this a P&L by Month export?';
           return;
         }
-        // Merge into STATE.fsData (P&L fields only, preserve BS fields if already present)
+        // Validate at least one account matched
+        const totalFields = periods.reduce((s,p)=>s+Object.keys(parsed[p]).length, 0);
+        if(totalFields === 0){
+          const hint = unmapped.slice(0,3).join(', ');
+          if(statusEl) statusEl.textContent = `⚠ Periods found but no accounts matched. First unrecognized: ${hint||'(none)'}`;
+          return;
+        }
+        // Merge into STATE.fsData (P&L fields only, preserve BS fields)
         periods.forEach(p => {
           STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
         });
         // Recompute year-level aggregates for any affected years
         const years = [...new Set(periods.map(p=>p.slice(0,4)))];
         years.forEach(yr => {
-          const mths = Object.keys(STATE.fsData).filter(k=>k.startsWith(yr+'-')).sort();
+          const mths = Object.keys(STATE.fsData).filter(k=>k.match(new RegExp(`^${yr}-\\d{2}$`))).sort();
           if(!mths.length) return;
           const agg = Object.assign({}, STATE.fsData[mths[mths.length-1]]||{});
           FS_IS_SUM_FIELDS.forEach(f => { agg[f] = mths.reduce((s,k)=>s+(STATE.fsData[k]?.[f]||0), 0); });
-          if(agg.total_income){ agg.gross_margin_pct=agg.gross_profit/agg.total_income; agg.exp_pct_rev=agg.total_opex/agg.total_income; agg.net_income_pct=agg.net_income/agg.total_income; }
+          fsDerive(agg);
           STATE.fsData[yr] = agg;
         });
-        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} loaded`;
+        const warnPart = unmapped.length ? ` (${unmapped.length} unrecognized account${unmapped.length!==1?'s':''} skipped)` : '';
+        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} · ${totalFields} values loaded${warnPart}`;
+        if(unmapped.length) console.log('[FS Upload] Unrecognized P&L accounts:', unmapped);
+
       } else {
-        const parsed = parseBalanceSheet(rows);
+        const parsed = parseBalanceSheet(rawRows);
+        const unmapped = parsed._flat?._unmapped || parsed._unmapped || [];
         if(parsed._flat){
-          // Single-column file: no period headers detected — show period picker
+          delete parsed._flat._unmapped;
+          // Single-column snapshot — show period picker
           if(statusEl) statusEl.textContent = '⚠ No period columns detected. Select a period above and re-upload.';
-          document.getElementById('fi-fsb-period-row').style.display = '';
+          document.getElementById('fi-fsb-period-row').style.display = 'flex';
           return;
         }
-        const periods = Object.keys(parsed);
+        delete parsed._unmapped;
+        const periods = Object.keys(parsed).filter(k => k.match(/^\d{4}-\d{2}$/));
         if(!periods.length){
-          if(statusEl) statusEl.textContent = '⚠ No recognized accounts found';
+          if(statusEl) statusEl.textContent = '⚠ No recognized periods found in Balance Sheet';
+          return;
+        }
+        const totalFields = periods.reduce((s,p)=>s+Object.keys(parsed[p]).length, 0);
+        if(totalFields === 0){
+          const hint = unmapped.slice(0,3).join(', ');
+          if(statusEl) statusEl.textContent = `⚠ Periods found but no accounts matched. First unrecognized: ${hint||'(none)'}`;
           return;
         }
         periods.forEach(p => {
           STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
         });
-        // Hide period picker — not needed for multi-period files
         const pRow = document.getElementById('fi-fsb-period-row');
         if(pRow) pRow.style.display = 'none';
-        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} loaded`;
+        const warnPart = unmapped.length ? ` (${unmapped.length} unrecognized skipped)` : '';
+        if(statusEl) statusEl.textContent = `✓ ${periods.length} period${periods.length!==1?'s':''} · ${totalFields} values loaded${warnPart}`;
+        if(unmapped.length) console.log('[FS Upload] Unrecognized BS accounts:', unmapped);
       }
 
-      // Update info panel
       updateFSUploadInfo();
       saveState();
       const _fsd = getFilteredDeals();
@@ -1537,6 +1646,7 @@ function handleFSUpload(subtype, input){
       try{ buildFSVarianceTables(_fsd); }catch(e){};
     } catch(err){
       if(statusEl) statusEl.textContent = '⚠ Parse error: '+err.message;
+      console.error('[FS Upload] error:', err);
     }
     input.value='';
   };
@@ -1548,10 +1658,21 @@ function updateFSUploadInfo(){
   const el = document.getElementById('fsUploadInfo');
   const listEl = document.getElementById('fsUploadPeriodList');
   if(!el||!listEl) return;
-  const periods = Object.keys(STATE.fsData).filter(k=>k.match(/^\d{4}-\d{2}$|^\d{4}$/)).sort();
+  // Only count periods that actually have financial data (not empty objects)
+  const periods = Object.keys(STATE.fsData)
+    .filter(k=>k.match(/^\d{4}-\d{2}$|^\d{4}$/) && Object.keys(STATE.fsData[k]).length > 0)
+    .sort();
   if(!periods.length){ el.style.display='none'; return; }
-  el.style.display='block';
+  el.style.display='flex';
   listEl.textContent = periods.join(', ');
+}
+
+function clearFSData(){
+  if(!confirm('Clear all uploaded financial statement data? The 2024 sample data will reload as default.')) return;
+  STATE.fsData = Object.assign({}, FS_WORKBOOK_DATA);
+  saveState();
+  updateFSUploadInfo();
+  buildAllViews();
 }
 
 function handleUpload(type, input){
@@ -4139,14 +4260,25 @@ const FS_PERIODS_ORDERED = ['2024-01','2024-02','2024-03','2024-04','2024-05','2
 // Default QB account-name → internal field mapping (fuzzy-matched, case-insensitive)
 // P&L accounts
 const QB_PL_ACCOUNT_MAP = {
+  // Origination income
   'origination income': 'orig_income',
   'origination fee': 'orig_income',
+  'origination fees': 'orig_income',
+  'origination fee income': 'orig_income',
+  // Collection fee income
   'collection fee income': 'coll_fee_income',
   'collection fee': 'coll_fee_income',
+  'collection fees': 'coll_fee_income',
+  // Monthly fee income
   'monthly fee income': 'monthly_fee_income',
   'monthly fee': 'monthly_fee_income',
+  'monthly fees': 'monthly_fee_income',
+  'account monitoring fee': 'monthly_fee_income',
+  'account monitoring': 'monthly_fee_income',
+  // Commission fee income
   'commission fee income': 'comm_fee_income',
   'commission income': 'comm_fee_income',
+  // Default fee income
   'default fee income': 'default_fee_income',
   'default fee': 'default_fee_income',
   'management fee income': 'mgmt_fee_income',
@@ -4158,64 +4290,140 @@ const QB_PL_ACCOUNT_MAP = {
   'commissions': 'comm_exp',
   'commission expenses': 'comm_exp',
   'other cogs': 'other_cogs',
+  'cost of goods sold': 'total_cogs',
   'total cost of goods sold': 'total_cogs',
   'total cogs': 'total_cogs',
   'gross profit': 'gross_profit',
+  // Bank / merchant fees
   'bank fees': 'bank_fees',
   'bank charges': 'bank_fees',
+  'bank service charges': 'bank_fees',
+  'bank service fee': 'bank_fees',
   'merchant bank fees': 'bank_fees',
+  'merchant fees': 'bank_fees',
+  'merchant processing': 'bank_fees',
+  'payment processing': 'bank_fees',
+  'wire fees': 'bank_fees',
+  'ach fees': 'bank_fees',
+  // Office / G&A
   'office expenses': 'office_exp',
   'office expense': 'office_exp',
   'general and administrative': 'office_exp',
+  'general administrative': 'office_exp',
+  'administrative expenses': 'office_exp',
+  'office supplies': 'office_exp',
+  'miscellaneous': 'office_exp',
+  // Software / subscriptions
   'software expenses': 'software_exp',
-  'software': 'software_exp',
+  'software expense': 'software_exp',
+  'software subscriptions': 'software_exp',
+  'saas': 'software_exp',
   'subscriptions': 'software_exp',
+  'computer and software': 'software_exp',
+  'technology': 'software_exp',
+  // Payroll
   'payroll': 'payroll_total',
+  'salaries': 'payroll_total',
   'salaries and wages': 'payroll_total',
+  'wages': 'payroll_total',
   'payroll expenses': 'payroll_total',
+  'payroll tax': 'payroll_total',
+  'payroll taxes': 'payroll_total',
+  'employee benefits': 'payroll_total',
+  // Professional fees
   'professional fees': 'prof_fees',
+  'professional services': 'prof_fees',
   'legal and professional': 'prof_fees',
+  'legal fees': 'prof_fees',
+  'accounting fees': 'prof_fees',
+  'consulting fees': 'prof_fees',
+  'legal and accounting': 'prof_fees',
+  // Sales & Marketing
   'sales and marketing': 'sales_mktg',
   'marketing': 'sales_mktg',
+  'advertising': 'sales_mktg',
+  'advertising and marketing': 'sales_mktg',
+  'business development': 'sales_mktg',
+  // Insurance
   'insurance': 'insurance',
+  'insurance expense': 'insurance',
+  // Travel
   'travel': 'travel',
   'travel and entertainment': 'travel',
+  'meals and entertainment': 'travel',
+  'travel expense': 'travel',
+  // Utilities
   'utilities': 'utilities',
+  'telephone': 'utilities',
+  'internet': 'utilities',
+  'utilities and telephone': 'utilities',
+  // Rent
   'rent': 'rent',
   'rent expense': 'rent',
+  'office rent': 'rent',
+  'lease': 'rent',
+  // Totals
   'total operating expenses': 'total_opex',
   'total expenses': 'total_opex',
+  'operating expenses': 'total_opex',
   'ebitda': 'ebitda',
+  // Other
   'other income': 'other_income',
   'other expense': 'other_exp',
   'other expenses': 'other_exp',
   'research and development': 'rd_exp',
-  'r&d': 'rd_exp',
+  'r and d': 'rd_exp',
   'interest expense': 'interest_exp',
+  'interest': 'interest_exp',
   'depreciation': 'depreciation',
   'depreciation and amortization': 'depreciation',
+  'amortization': 'depreciation',
   'taxes': 'taxes',
   'income taxes': 'taxes',
+  'state taxes': 'taxes',
   'net income': 'net_income',
   'net earnings': 'net_income',
+  'net profit': 'net_income',
 };
 
 // Balance sheet accounts
 const QB_BS_ACCOUNT_MAP = {
+  // Cash
   'cash': 'cash',
   'cash and cash equivalents': 'cash',
+  'checking': 'cash',
+  'savings': 'cash',
+  'bank accounts': 'cash',
+  // AR
   'accounts receivable': 'ar',
+  'trade receivables': 'ar',
+  // Other current assets
   'other current assets': 'other_ca',
+  'prepaid expenses': 'other_ca',
+  'prepaid': 'other_ca',
+  // Current asset totals
   'total current assets': 'total_ca',
+  // Fixed assets
   'fixed assets': 'fixed_assets',
   'property and equipment': 'fixed_assets',
+  'furniture and equipment': 'fixed_assets',
+  'equipment': 'fixed_assets',
+  // Non-current totals
   'total non-current assets': 'total_nca',
+  'total long-term assets': 'total_nca',
+  'total fixed assets': 'total_nca',
+  // Total assets
   'total assets': 'total_assets',
+  // Liabilities
   'accrued expenses': 'accrued_exp',
   'accrued liabilities': 'accrued_exp',
+  'accrued payables': 'accrued_exp',
   'syndicator payable': 'synd_payable',
   'syndication payable': 'synd_payable',
+  'syndicators payable': 'synd_payable',
   'iso payable': 'iso_payable',
+  'iso commissions payable': 'iso_payable',
+  'broker payable': 'iso_payable',
   'deferred income': 'deferred_income',
   'deferred revenue': 'deferred_income',
   'credit card': 'credit_card',
