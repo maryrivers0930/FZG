@@ -5216,6 +5216,7 @@ function buildHistPerfTable(deals){
         ${lrow('Commissions % of Funded',r=>r.funded?r.commission/r.funded:0,fP)}
         ${lrow('Merchant Bank Fee',r=>r.merchantBankFee,fC)}
         ${lrow('Bank Fees % of Funded',r=>r.funded?r.merchantBankFee/r.funded:0,fP)}
+        ${lrow('Upfront TPC',r=>r.funded+r.commission-r.merchantBankFee,fC)}
         ${lrow('Collected',r=>r.collected,fC,'var(--green)')}
         ${lrow('Management Fees',r=>r.mgmtFees,fC)}
         ${lrow('Discounts',r=>r.discounts,fC)}
