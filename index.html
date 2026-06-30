@@ -1347,11 +1347,16 @@ function parseQBNum(raw){
 
 // Derive computed fields for a parsed period object
 function fsDerive(r){
-  if(r.total_income == null && (r.orig_income != null || r.mgmt_fee_income != null)){
-    r.total_income = (r.orig_income||0)+(r.coll_fee_income||0)+(r.monthly_fee_income||0)+
-      (r.comm_fee_income||0)+(r.default_fee_income||0)+(r.mgmt_fee_income||0);
+  // ── Income Statement totals ──────────────────────────────────
+  if(r.total_income == null){
+    const hasIncome = r.orig_income != null || r.coll_fee_income != null ||
+      r.monthly_fee_income != null || r.comm_fee_income != null ||
+      r.default_fee_income != null || r.mgmt_fee_income != null;
+    if(hasIncome)
+      r.total_income = (r.orig_income||0)+(r.coll_fee_income||0)+(r.monthly_fee_income||0)+
+        (r.comm_fee_income||0)+(r.default_fee_income||0)+(r.mgmt_fee_income||0);
   }
-  if(r.total_cogs == null && r.comm_exp != null){
+  if(r.total_cogs == null && (r.comm_exp != null || r.other_cogs != null)){
     r.total_cogs = (r.comm_exp||0)+(r.other_cogs||0);
   }
   if(r.gross_profit == null && r.total_income != null && r.total_cogs != null){
@@ -1367,13 +1372,78 @@ function fsDerive(r){
     r.ebitda = r.gross_profit - r.total_opex;
   }
   if(r.net_income == null && r.ebitda != null){
-    r.net_income = r.ebitda - (r.interest_exp||0) - (r.depreciation||0) - (r.taxes||0) +
-      (r.other_income||0) - (r.other_exp||0) - (r.rd_exp||0);
+    r.net_income = r.ebitda + (r.other_income||0) - (r.other_exp||0) -
+      (r.rd_exp||0) - (r.interest_exp||0) - (r.depreciation||0) - (r.taxes||0);
   }
+  // IS ratios
   if(r.total_income){
-    if(r.gross_profit  != null) r.gross_margin_pct = r.gross_profit/r.total_income;
-    if(r.total_opex    != null) r.exp_pct_rev = r.total_opex/r.total_income;
-    if(r.net_income    != null) r.net_income_pct = r.net_income/r.total_income;
+    if(r.gross_profit  != null) r.gross_margin_pct = r.gross_profit / r.total_income;
+    if(r.total_opex    != null) r.exp_pct_rev       = r.total_opex  / r.total_income;
+    if(r.net_income    != null) r.net_income_pct    = r.net_income  / r.total_income;
+  }
+
+  // ── Balance Sheet totals ─────────────────────────────────────
+  // Simple single-item subtotals
+  if(r.total_cc  == null && r.credit_card != null) r.total_cc  = r.credit_card;
+  if(r.total_ocl == null && r.other_cl    != null) r.total_ocl = r.other_cl;
+  if(r.total_ncl == null && r.lt_liab     != null) r.total_ncl = r.lt_liab;
+  // Current assets
+  if(r.total_ca == null && (r.cash != null || r.ar != null || r.other_ca != null)){
+    r.total_ca = (r.cash||0) + (r.ar||0) + (r.other_ca||0);
+  }
+  // Non-current assets
+  if(r.total_nca == null && (r.long_term_assets != null || r.fixed_assets != null)){
+    r.total_nca = (r.long_term_assets||0) + (r.fixed_assets||0);
+  }
+  // Total assets
+  if(r.total_assets == null && (r.total_ca != null || r.total_nca != null)){
+    r.total_assets = (r.total_ca||0) + (r.total_nca||0);
+  }
+  // Total current liabilities
+  if(r.total_cl == null){
+    const hasCL = r.accrued_exp != null || r.synd_payable != null || r.iso_payable != null ||
+      r.deferred_income != null || r.credit_card != null || r.other_cl != null;
+    if(hasCL)
+      r.total_cl = (r.accrued_exp||0) + (r.synd_payable||0) + (r.iso_payable||0) +
+        (r.deferred_income||0) + (r.total_cc||0) + (r.total_ocl||0);
+  }
+  // Total liabilities
+  if(r.total_liab == null && (r.total_cl != null || r.total_ncl != null)){
+    r.total_liab = (r.total_cl||0) + (r.total_ncl||0);
+  }
+  // Total equity
+  if(r.total_equity == null &&
+      (r.distribution != null || r.opening_equity != null ||
+       r.retained_earnings != null || r.net_income_bs != null)){
+    r.total_equity = (r.distribution||0) + (r.opening_equity||0) +
+      (r.retained_earnings||0) + (r.net_income_bs||0);
+  }
+  // Total liabilities and equity
+  if(r.total_liab_equity == null && (r.total_liab != null || r.total_equity != null)){
+    r.total_liab_equity = (r.total_liab||0) + (r.total_equity||0);
+  }
+
+  // ── KPI ratios (% of origination income) ────────────────────
+  if(r.orig_income){
+    const o = r.orig_income;
+    if(r.bank_fees    != null) r.kpi_bankfees_pct_orig = r.bank_fees    / o;
+    if(r.office_exp   != null) r.kpi_office_pct_orig   = r.office_exp   / o;
+    if(r.software_exp != null) r.kpi_software_pct_orig = r.software_exp / o;
+    if(r.prof_fees    != null) r.kpi_proffees_pct_orig = r.prof_fees    / o;
+    if(r.sales_mktg   != null) r.kpi_sales_pct_orig    = r.sales_mktg   / o;
+    if(r.travel       != null) r.kpi_travel_pct_orig   = r.travel       / o;
+    if(r.rent         != null) r.kpi_rent_pct_orig     = r.rent         / o;
+    if(r.total_opex   != null) r.total_exp_pct_orig    = r.total_opex   / o;
+  }
+  // ── KPI ratios (% of revenue / total income) ─────────────────
+  if(r.total_income){
+    const rev = r.total_income;
+    if(r.bank_fees    != null) r.kpi_bankfees_pct_rev  = r.bank_fees    / rev;
+    if(r.office_exp   != null) r.kpi_office_pct_rev    = r.office_exp   / rev;
+    if(r.software_exp != null) r.kpi_software_pct_rev  = r.software_exp / rev;
+    if(r.prof_fees    != null) r.kpi_proffees_pct_rev  = r.prof_fees    / rev;
+    if(r.sales_mktg   != null) r.kpi_sales_pct_rev     = r.sales_mktg   / rev;
+    if(r.total_opex   != null) r.total_exp_pct_rev     = r.total_opex   / rev;
   }
 }
 
@@ -4403,7 +4473,10 @@ const QB_BS_ACCOUNT_MAP = {
   'prepaid': 'other_ca',
   // Current asset totals
   'total current assets': 'total_ca',
-  // Fixed assets
+  // Long-term / fixed assets
+  'long term assets': 'long_term_assets',
+  'long-term assets': 'long_term_assets',
+  'intangible assets': 'long_term_assets',
   'fixed assets': 'fixed_assets',
   'property and equipment': 'fixed_assets',
   'furniture and equipment': 'fixed_assets',
@@ -4428,10 +4501,23 @@ const QB_BS_ACCOUNT_MAP = {
   'deferred revenue': 'deferred_income',
   'credit card': 'credit_card',
   'credit cards': 'credit_card',
+  'other current liabilities': 'other_cl',
+  'other liabilities': 'other_cl',
   'total current liabilities': 'total_cl',
+  'long term liabilities': 'lt_liab',
+  'long-term liabilities': 'lt_liab',
+  'notes payable': 'lt_liab',
+  'loans payable': 'lt_liab',
   'total non-current liabilities': 'total_ncl',
+  'total long-term liabilities': 'total_ncl',
   'total liabilities': 'total_liab',
+  'distribution': 'distribution',
   'distributions': 'distribution',
+  'opening balance equity': 'opening_equity',
+  'opening equity': 'opening_equity',
+  'owners equity': 'opening_equity',
+  "owner's equity": 'opening_equity',
+  'paid in capital': 'opening_equity',
   'retained earnings': 'retained_earnings',
   'net income': 'net_income_bs',
   'total equity': 'total_equity',
@@ -4528,6 +4614,10 @@ function getFSWbRow(periodK){
     agg.kpi_sales_pct_rev=_fi?agg.sales_mktg/_fi:null;
     agg.total_exp_pct_rev=_fi?_fe/_fi:null;
     agg.mgmt_fee_pct=_fc?(agg.mgmt_total_fees||0)/_fc:null;
+    // Re-derive BS totals from the end-of-quarter snapshot fields
+    ['total_cc','total_ocl','total_ncl','total_ca','total_nca','total_assets',
+     'total_cl','total_liab','total_equity','total_liab_equity'].forEach(f=>{ agg[f]=null; });
+    fsDerive(agg);
     return agg;
   }
   return {};
@@ -4585,6 +4675,10 @@ function getFSWbAllPeriods(periods){
   agg.kpi_sales_pct_rev         = fi ? agg.sales_mktg/fi : null;
   agg.total_exp_pct_rev         = fi ? fe/fi : null;
   agg.mgmt_fee_pct              = fc ? (agg.mgmt_total_fees||0)/fc : null;
+  // Re-derive BS totals from the end-of-period snapshot fields
+  ['total_cc','total_ocl','total_ncl','total_ca','total_nca','total_assets',
+   'total_cl','total_liab','total_equity','total_liab_equity'].forEach(f=>{ agg[f]=null; });
+  fsDerive(agg);
   return agg;
 }
 
