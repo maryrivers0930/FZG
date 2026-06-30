@@ -3252,6 +3252,9 @@ function buildCover(deals){
   });
   window._isoAllRows=Object.values(isoData).sort((a,b)=>b.funded-a.funded);
   window._isoTotalFunded=totalFunded;
+  // Fix ISO card height BEFORE populating the table so the right column's
+  // natural content height is measured while the ISO card is still empty.
+  matchIsoHeight();
   renderIsoTable('');
   const isoSearchEl=document.getElementById('isoSearch');
   if(isoSearchEl) isoSearchEl.value='';
@@ -3869,21 +3872,15 @@ function buildFSWorkbookSections(deals){
   deals = deals || getFilteredDeals();
   buildFSSummaryTables(deals);
   buildFSVarianceTables(deals);
-  // Match ISO card height to right column after render
-  requestAnimationFrame(matchIsoHeight);
 }
 
 function matchIsoHeight(){
+  // Called BEFORE the ISO table is populated, so right column height is unaffected by ISO rows.
   const right = document.getElementById('isoRightCol');
   const card  = document.getElementById('isoLeftCard');
   const wrap  = document.getElementById('isoTblWrap');
   if(!right || !card || !wrap) return;
-  // Sum scrollHeight of each right-column card + the gap between them.
-  // scrollHeight reflects content size regardless of how the grid stretches the element,
-  // so this is immune to circular dependency with the ISO card's own height.
-  const kids = Array.from(right.children);
-  const GAP = 14; // must match gap:14px on the grid container
-  const h = kids.reduce((sum, el) => sum + el.scrollHeight, 0) + GAP * Math.max(0, kids.length - 1);
+  const h = right.offsetHeight;
   if(h < 10) return;
   card.style.height = h + 'px';
   card.style.overflow = 'hidden';
