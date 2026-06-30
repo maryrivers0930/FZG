@@ -4297,7 +4297,6 @@ function buildFSSummaryTables(deals){
 function buildFSVarianceTables(deals){
   deals = deals || getFilteredDeals();
 
-  // Group deals by period
   const byPeriod = {};
   deals.forEach(d => {
     const k = periodKey(d.fundedDate, STATE.groupBy);
@@ -4314,7 +4313,6 @@ function buildFSVarianceTables(deals){
     return;
   }
 
-  // Use dropdown selection if available, otherwise fall back to latest two periods
   const currSel  = document.getElementById('varCurrSel');
   const priorSel = document.getElementById('varPriorSel');
   const cP = (currSel  && byPeriod[currSel.value])  ? currSel.value  : periods[periods.length - 1];
@@ -4323,54 +4321,321 @@ function buildFSVarianceTables(deals){
   const pLbl = periodLabel(pP, STATE.groupBy);
   if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
 
-  const C = computeFSMetrics(byPeriod[cP]);
-  const P = computeFSMetrics(byPeriod[pP]);
+  const cW = getFSWbRow(cP);
+  const pW = getFSWbRow(pP);
+  const cD = computeFSMetrics(byPeriod[cP] || []);
+  const pD = computeFSMetrics(byPeriod[pP] || []);
 
-  function varRow(label, cv, pv, isPct, higherBetter, isBold, isHdr){
-    if(isHdr) return `<tr style="background:rgba(139,92,246,.08)"><td colspan="5" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
-    const diff = (cv||0)-(pv||0);
-    const pct  = pv ? diff/Math.abs(pv) : (cv?1:0);
-    const dir  = diff>0?(higherBetter!==false?'up':'down'):diff<0?(higherBetter!==false?'down':'up'):'neu';
-    const arrow= diff>0?'▲':diff<0?'▼':'—';
-    const fmt  = isPct ? v=>(v*100).toFixed(2)+'%' : v=>fmtFS(v,false);
-    const diffStr = isPct ? (diff>=0?'+':'')+((diff||0)*100).toFixed(2)+'%' : fmtFS(diff,false);
+  // Extended portfolio metrics computed directly from deal arrays
+  function portMetrics(ds){
+    const cnt = ds.length;
+    const funded    = ds.reduce((a,d)=>a+d.amount,0);
+    const collected = ds.reduce((a,d)=>a+d.collected,0);
+    const rtr       = ds.reduce((a,d)=>a+d.rtr,0);
+    const remaining = ds.reduce((a,d)=>a+d.remaining,0);
+    const mgmtFee   = ds.reduce((a,d)=>a+(d.mgmtFee||0),0);
+    const commission= ds.reduce((a,d)=>a+(d.commission||0),0);
+    const bankFee   = ds.reduce((a,d)=>a+(d.merchantBankFee||0),0);
+    const discounts = ds.reduce((a,d)=>a+(d.discounts||0),0);
+    const writeOff  = ds.reduce((a,d)=>a+(d.writeOff||0),0);
+    const wFactor   = ds.filter(d=>d.factor>0);
+    const avgFactor = wFactor.length ? wFactor.reduce((a,d)=>a+d.factor,0)/wFactor.length : null;
+    const wTerm     = ds.filter(d=>d.term>0);
+    const avgTerm   = wTerm.length ? wTerm.reduce((a,d)=>a+d.term,0)/wTerm.length : null;
+    // Status counts
+    function cntSt(keywords){
+      return ds.filter(d=>{ const sl=(d.status||'').toLowerCase().trim(); return keywords.some(k=>sl===k||sl.includes(k)); }).length;
+    }
+    const performing      = cntSt(['active','performing','legal - collections pif']);
+    const closedComplete  = cntSt(['closed']) - cntSt(['closed, incomplete','closed incomplete']);
+    const closedIncomplete= cntSt(['closed, incomplete','closed incomplete']);
+    const collection      = cntSt(["collection's"]) - cntSt(["collection's - paying"]);
+    const inHouseCollect  = cntSt(['in-house legal']);
+    const bankruptcy      = cntSt(['bankruptcy']);
+    const legal           = cntSt(['legal']) - cntSt(['in-house legal','legal - paying','legal - collections pif']);
+    const inHouseLegal    = cntSt(['in-house legal']);
+    const underPerforming = cntSt(["collection's - paying",'legal - paying','modified payments']);
+    const syndDefault     = cntSt(['syndication default']);
+    const pending         = cntSt(['pending']);
+    const modification    = cntSt(['modified payments']);
+    const defaultCount    = ds.filter(d=>isDefault(d.status)).length;
+    return { cnt, funded, collected, rtr, remaining, mgmtFee, commission, bankFee, discounts, writeOff,
+      avgFactor, avgTerm,
+      avgDealSize:      cnt ? funded/cnt : null,
+      commPctFunded:    funded ? commission/funded : null,
+      bankPctFunded:    funded ? bankFee/funded : null,
+      recRate:          funded ? collected/funded : null,
+      performing, closedComplete, closedIncomplete, collection, inHouseCollect,
+      bankruptcy, legal, inHouseLegal, underPerforming, syndDefault, pending, modification,
+      defaultCount,
+      defaultPct: cnt ? defaultCount/cnt : null,
+    };
+  }
+  const cPM = portMetrics(byPeriod[cP] || []);
+  const pPM = portMetrics(byPeriod[pP] || []);
+
+  // ── Section header ────────────────────────────────────────────────
+  function sHdr(label, isSub=false){
+    const bg  = isSub ? 'rgba(30,36,50,.6)' : 'rgba(139,92,246,.1)';
+    const clr = isSub ? 'var(--muted)' : 'var(--purple)';
+    const pl  = isSub ? '20px' : '8px';
+    return `<tr style="background:${bg}"><td colspan="5" style="font-weight:700;font-size:11px;color:${clr};text-transform:uppercase;letter-spacing:.5px;padding:5px ${pl}">${label}</td></tr>`;
+  }
+
+  // ── Core variance row ─────────────────────────────────────────────
+  function varRow(label, cv, pv, isPct, higherBetter, bold, fmtFn){
+    const allNull = cv == null && pv == null;
+    const pl  = bold ? '8' : '20';
+    const wt  = bold ? 'font-weight:700;' : '';
+    const bg  = bold ? 'background:rgba(88,166,255,.06)' : '';
+    if(allNull) return `<tr style="${bg}"><td style="${wt}padding-left:${pl}px">${label}</td><td colspan="4" style="text-align:center;color:var(--muted)">—</td></tr>`;
+    cv = cv||0; pv = pv||0;
+    const diff  = cv - pv;
+    const pct   = pv ? diff/Math.abs(pv) : (cv?1:0);
+    const dir   = diff>0?(higherBetter!==false?'up':'down'):diff<0?(higherBetter!==false?'down':'up'):'neu';
+    const arrow = diff>0?'▲':diff<0?'▼':'—';
+    const fmt   = fmtFn || (isPct ? v=>(v*100).toFixed(2)+'%' : v=>fmtFS(v,false));
+    const diffStr = isPct ? (diff>=0?'+':'')+((diff)*100).toFixed(2)+'%'
+                          : (fmtFn ? (diff>=0?'+':'')+fmtFn(diff) : fmtFS(diff,false));
     const pctStr  = pv ? (Math.abs(pct)*100).toFixed(1)+'%' : 'N/A';
-    const bold = isBold?'font-weight:700;':'';
-    const bg   = isBold?'background:rgba(88,166,255,.06)':'';
     return `<tr style="${bg}">
-      <td style="${bold}padding-left:${isBold?'8':'20'}px">${label}</td>
-      <td style="text-align:right;${bold}color:var(--blue)">${fmt(cv||0)}</td>
-      <td style="text-align:right;color:var(--muted)">${fmt(pv||0)}</td>
+      <td style="${wt}padding-left:${pl}px">${label}</td>
+      <td style="text-align:right;${wt}color:var(--blue)">${fmt(cv)}</td>
+      <td style="text-align:right;color:var(--muted)">${fmt(pv)}</td>
       <td style="text-align:right">${diffStr}</td>
       <td class="${dir}" style="text-align:right">${arrow} ${pctStr}</td>
     </tr>`;
   }
 
-  tbl.innerHTML = `<thead><tr><th>Metric</th><th style="text-align:right">${cLbl}</th><th style="text-align:right;color:var(--muted)">${pLbl}</th><th style="text-align:right">Change</th><th style="text-align:right">% Chg</th></tr></thead><tbody>
-    ${varRow('INCOME STATEMENT',null,null,false,true,false,true)}
-    ${varRow('Management Fee Income', C.mgmtFee, P.mgmtFee,false,true)}
-    ${varRow('Total Income', C.mgmtFee, P.mgmtFee,false,true,true)}
-    ${varRow('Commission Expenses', C.commission, P.commission,false,false)}
-    ${varRow('Total COGS', C.totalCogs, P.totalCogs,false,false,true)}
-    ${varRow('Gross Profit', C.grossProfit, P.grossProfit,false,true,true)}
-    ${varRow('Gross Margin %', C.grossMargin, P.grossMargin,true,true)}
-    ${varRow('Bank Fees', C.bankFee, P.bankFee,false,false)}
-    ${varRow('EBITDA', C.ebitda, P.ebitda,false,true,true)}
-    ${varRow('Net Income', C.netIncome, P.netIncome,false,true,true)}
-    ${varRow('Net Income % of Revenue', C.niPctRev, P.niPctRev,true,true)}
-    ${varRow('PORTFOLIO',null,null,false,true,false,true)}
-    ${varRow('Deal Count', C.cnt, P.cnt,false,true,true)}
-    ${varRow('Total Funded', C.funded, P.funded,false,true,true)}
-    ${varRow('Total Collected', C.collected, P.collected,false,true,true)}
-    ${varRow('Remaining RTR', C.remaining, P.remaining,false,false)}
-    ${varRow('Recovery Rate', C.recRate, P.recRate,true,true,true)}
-    ${varRow('Write-Offs', C.writeOff, P.writeOff,false,false)}
-    ${varRow('Discounts', C.discounts, P.discounts,false,false)}
-    ${varRow('P&L METRICS (% OF FUNDED)',null,null,false,true,false,true)}
-    ${varRow('Management Fee %', C.mgmtPctFunded, P.mgmtPctFunded,true,true)}
-    ${varRow('Commission %', C.commPctFunded, P.commPctFunded,true,false)}
-    ${varRow('Bank Fee %', C.bankPctFunded, P.bankPctFunded,true,false)}
-    ${varRow('Net Income %', C.netPctFunded, P.netPctFunded,true,true,true)}
+  // Workbook-sourced row
+  function wVR(label, field, isPct, higher, bold){
+    const cv = cW[field] != null ? cW[field] : null;
+    const pv = pW[field] != null ? pW[field] : null;
+    return varRow(label, cv, pv, isPct, higher, bold);
+  }
+  // Deal-computed row
+  function dVR(label, key, isPct, higher, bold){
+    return varRow(label, cD[key]??null, pD[key]??null, isPct, higher, bold);
+  }
+  // Portfolio metrics row
+  function pVR(label, key, isPct, higher, bold, fmtFn){
+    return varRow(label, cPM[key]??null, pPM[key]??null, isPct, higher, bold, fmtFn);
+  }
+  // Computed ratio: wbd[numF] / wbd[denF]
+  function cVR(label, numF, denF, higher, bold){
+    const cv = cW[denF] ? (cW[numF]||0)/cW[denF] : null;
+    const pv = pW[denF] ? (pW[numF]||0)/pW[denF] : null;
+    return varRow(label, cv, pv, true, higher, bold);
+  }
+  // Computed ratio: portMetric[numF] / portMetric[denF] (deal-based)
+  function pdVR(label, numF, denF, higher, bold){
+    const cv = cPM[denF] ? (cPM[numF]||0)/cPM[denF] : null;
+    const pv = pPM[denF] ? (pPM[numF]||0)/pPM[denF] : null;
+    return varRow(label, cv, pv, true, higher, bold);
+  }
+  // Management-fee denominator (from deal data mgmtFee vs wbd field)
+  function mfVR(label, numF, higher, bold){
+    const cv = cD.mgmtFee ? (cW[numF]||0)/cD.mgmtFee : null;
+    const pv = pD.mgmtFee ? (pW[numF]||0)/pD.mgmtFee : null;
+    return varRow(label, cv, pv, true, higher, bold);
+  }
+
+  const fmtCount = v => Math.round(v).toString();
+  const fmtFact  = v => v.toFixed(4);
+  const fmtDays  = v => Math.round(v)+' d';
+
+  tbl.innerHTML = `<thead><tr>
+    <th style="min-width:300px">Line Item</th>
+    <th style="text-align:right">${cLbl}</th>
+    <th style="text-align:right;color:var(--muted)">${pLbl}</th>
+    <th style="text-align:right">Change</th>
+    <th style="text-align:right">% Chg</th>
+  </tr></thead><tbody>
+
+  ${sHdr('Balance Sheet')}
+  ${sHdr('Assets', true)}
+  ${sHdr('Current Assets', true)}
+  ${wVR('Cash and Cash Equivalents',      'cash',             false, true)}
+  ${wVR('Accounts Receivable',            'ar',               false, true)}
+  ${wVR('Other Current Assets',           'other_ca',         false, true)}
+  ${wVR('Total Current Assets',           'total_ca',         false, true,  true)}
+  ${sHdr('Long Term Assets', true)}
+  ${wVR('Fixed Assets',                   'fixed_assets',     false, true)}
+  ${wVR('Total Non-Current Assets',       'total_nca',        false, true,  true)}
+  ${wVR('Total Assets',                   'total_assets',     false, true,  true)}
+  ${sHdr('Liabilities', true)}
+  ${wVR('Accrued Expenses',               'accrued_exp',      false, false)}
+  ${wVR('Syndicate Partners Payable',     'synd_payable',     false, false)}
+  ${wVR('ISO Commissions Payable',        'iso_payable',      false, false)}
+  ${wVR('Deferred Income',               'deferred_income',   false, false)}
+  ${wVR('Credit Card',                   'credit_card',       false, false)}
+  ${wVR('Total for Credit Cards',        'total_cc',          false, false, true)}
+  ${wVR('Other Current Liabilities',     'other_cl',          false, false)}
+  ${wVR('Total for Other Current Liabilities','total_ocl',    false, false, true)}
+  ${wVR('Total Current Liabilities',     'total_cl',          false, false, true)}
+  ${wVR('Long Term Liabilities',         'lt_liab',           false, false)}
+  ${wVR('Total Non Current Liabilities', 'total_ncl',         false, false, true)}
+  ${wVR('Total Liabilities',             'total_liab',        false, false, true)}
+  ${sHdr('Equity', true)}
+  ${wVR('Distribution',                  'distribution',      false, false)}
+  ${wVR('Opening Balance Equity',        'opening_equity',    false, true)}
+  ${wVR('Retained Earnings',             'retained_earnings', false, true)}
+  ${wVR('Net Income',                    'net_income_bs',     false, true)}
+  ${wVR('Total Equity',                  'total_equity',      false, true,  true)}
+  ${wVR('Total Liabilities and Equity',  'total_liab_equity', false, true,  true)}
+
+  ${sHdr('Income Statement for Period Ended')}
+  ${sHdr('Income', true)}
+  ${wVR('Origination Income',            'orig_income',       false, true)}
+  ${wVR('Collection Fee Income',         'coll_fee_income',   false, true)}
+  ${wVR('Monthly Fee Income',            'monthly_fee_income',false, true)}
+  ${wVR('Commission Fee Income',         'comm_fee_income',   false, true)}
+  ${wVR('Default Fee Income',            'default_fee_income',false, true)}
+  ${dVR('Management Fee Income',         'mgmtFee',           false, true)}
+  ${wVR('Total Income',                  'total_income',      false, true,  true)}
+  ${sHdr('Cost of Goods Sold', true)}
+  ${dVR('Commission Expenses',           'commission',        false, false)}
+  ${wVR('Other Cost of Goods Sold',      'other_cogs',        false, false)}
+  ${wVR('Total Cost of Goods Sold',      'total_cogs',        false, false, true)}
+  ${wVR('Gross Profit',                  'gross_profit',      false, true,  true)}
+  ${wVR('Gross Margin %',                'gross_margin_pct',  true,  true)}
+  ${sHdr('Operating Expenses', true)}
+  ${dVR('Bank Fees & Service Charges',   'bankFee',           false, false)}
+  ${wVR('Office Expenses',               'office_exp',        false, false)}
+  ${wVR('Software Expense',              'software_exp',      false, false)}
+  ${wVR('Payroll and Related Expenses',  'payroll_total',     false, false)}
+  ${wVR('Professional Fees',             'prof_fees',         false, false)}
+  ${wVR('Sales & Marketing Expenses',    'sales_mktg',        false, false)}
+  ${wVR('Insurance',                     'insurance',         false, false)}
+  ${wVR('Transportation and Travel',     'travel',            false, false)}
+  ${wVR('Utilities',                     'utilities',         false, false)}
+  ${wVR('Rent Expenses',                 'rent',              false, false)}
+  ${wVR('Total for Expenses',            'total_opex',        false, false, true)}
+  ${wVR('Expenses % of Revenue',         'exp_pct_rev',       true,  false)}
+  ${wVR('EBITDA',                        'ebitda',            false, true,  true)}
+  ${wVR('Other Income',                  'other_income',      false, true)}
+  ${wVR('Other Expenses',                'other_exp',         false, false)}
+  ${wVR('Research and Development',      'rd_exp',            false, false)}
+  ${wVR('Interest Expense',              'interest_exp',      false, false)}
+  ${wVR('Depreciation',                  'depreciation',      false, false)}
+  ${wVR('Taxes',                         'taxes',             false, false)}
+  ${wVR('Net Income',                    'net_income',        false, true,  true)}
+  ${wVR('Net Income % of Revenue',       'net_income_pct',    true,  true)}
+  ${wVR('Growth',                        'growth',            true,  true)}
+
+  ${sHdr('KPIs / Profit & Loss Metrics')}
+  ${sHdr('Income As % of Funded Amount', true)}
+  ${wVR('Collection Fee Income % of Funded',      'kpi_coll_fee_pct_funded',   true, true)}
+  ${wVR('Monthly Fee Income % of Funded',         'kpi_monthly_pct_funded',    true, true)}
+  ${wVR('Commission Fee Income % of Funded',      'kpi_comm_fee_pct_funded',   true, true)}
+  ${wVR('Default Fee Income % of Funded',         'kpi_default_pct_funded',    true, true)}
+  ${wVR('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',       true, true)}
+  ${wVR('Total Income As % of Funded Amount',     'total_income_pct_funded',   true, true, true)}
+  ${sHdr('Income As % of Collections', true)}
+  ${wVR('Collection Fee Income % of Collections', 'kpi_coll_fee_pct_coll',     true, true)}
+  ${wVR('Monthly Fee Income % of Collections',    'kpi_monthly_pct_coll',      true, true)}
+  ${wVR('Commission Fee Income % of Collections', 'kpi_comm_fee_pct_coll',     true, true)}
+  ${wVR('Default Fee Income % of Collections',    'kpi_default_pct_coll',      true, true)}
+  ${wVR('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',         true, true)}
+  ${wVR('Total Income As % of Collections',       'total_income_pct_coll',     true, true, true)}
+  ${sHdr('Cost of Goods Sold As % of Funded Amount', true)}
+  ${wVR('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded',   true, false)}
+  ${wVR('Other COGS % of Funded',                 'kpi_other_cogs_pct_funded', true, false)}
+  ${wVR('Total COGS As % of Funded',              'total_cogs_pct_funded',     true, false, true)}
+  ${sHdr('Expenses As % of Funded Amount', true)}
+  ${wVR('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded',   true, false)}
+  ${wVR('Office Expenses % of Funded',            'kpi_office_pct_funded',     true, false)}
+  ${wVR('Software Expense % of Funded',           'kpi_software_pct_funded',   true, false)}
+  ${wVR('Payroll % of Funded',                    'kpi_payroll_pct_funded',    true, false)}
+  ${wVR('Professional Fees % of Funded',          'kpi_proffees_pct_funded',   true, false)}
+  ${cVR('Insurance % of Funded',                  'insurance',    'total_funded', false, false)}
+  ${cVR('Utilities % of Funded',                  'utilities',    'total_funded', false, false)}
+  ${wVR('Rent % of Funded',                       'kpi_rent_pct_funded',       true, false)}
+  ${wVR('Total Expenses As % of Funded',          'total_exp_pct_funded',      true, false, true)}
+  ${wVR('Net Income As % of Funded',              'net_income_pct_funded',     true, true,  true)}
+  ${sHdr('Expenses As % of Origination Income', true)}
+  ${wVR('Bank Fees % of Origination Income',       'kpi_bankfees_pct_orig',    true, false)}
+  ${wVR('Office Expenses % of Origination Income', 'kpi_office_pct_orig',      true, false)}
+  ${wVR('Software Expense % of Origination Income','kpi_software_pct_orig',    true, false)}
+  ${cVR('Payroll % of Origination Income',         'payroll_total','orig_income',  false, false)}
+  ${wVR('Professional Fees % of Origination Income','kpi_proffees_pct_orig',   true, false)}
+  ${wVR('Sales & Marketing % of Origination Income','kpi_sales_pct_orig',      true, false)}
+  ${cVR('Insurance % of Origination Income',       'insurance',    'orig_income',  false, false)}
+  ${wVR('Transportation & Travel % of Origination Income','kpi_travel_pct_orig',true,false)}
+  ${cVR('Utilities % of Origination Income',       'utilities',    'orig_income',  false, false)}
+  ${wVR('Rent % of Origination Income',            'kpi_rent_pct_orig',        true, false)}
+  ${wVR('Total Expenses As % of Origination Income','total_exp_pct_orig',      true, false, true)}
+  ${sHdr('Expenses As % of Revenue', true)}
+  ${wVR('Bank Fees % of Revenue',                  'kpi_bankfees_pct_rev',     true, false)}
+  ${wVR('Office Expenses % of Revenue',            'kpi_office_pct_rev',       true, false)}
+  ${wVR('Software Expense % of Revenue',           'kpi_software_pct_rev',     true, false)}
+  ${cVR('Payroll % of Revenue',                    'payroll_total','total_income', false, false)}
+  ${wVR('Professional Fees % of Revenue',          'kpi_proffees_pct_rev',     true, false)}
+  ${wVR('Sales & Marketing % of Revenue',          'kpi_sales_pct_rev',        true, false)}
+  ${wVR('Net Income % of Revenue',                 'net_income_pct',           true, true)}
+  ${cVR('Transportation & Travel % of Revenue',    'travel',       'total_income', false, false)}
+  ${cVR('Utilities % of Revenue',                  'utilities',    'total_income', false, false)}
+  ${cVR('Rent % of Revenue',                       'rent',         'total_income', false, false)}
+  ${wVR('Total Expenses As % of Revenue',          'total_exp_pct_rev',        true, false, true)}
+  ${sHdr('Expenses As % of Management Fees', true)}
+  ${mfVR('Bank Fees % of Management Fees',         'bank_fees',    false)}
+  ${mfVR('Office Expenses % of Management Fees',   'office_exp',   false)}
+  ${mfVR('Software Expense % of Management Fees',  'software_exp', false)}
+  ${mfVR('Payroll % of Management Fees',           'payroll_total',false)}
+  ${mfVR('Professional Fees % of Management Fees', 'prof_fees',    false)}
+  ${mfVR('Sales & Marketing % of Management Fees', 'sales_mktg',   false)}
+  ${mfVR('Net Income % of Management Fees',        'net_income',   true)}
+  ${mfVR('Transportation & Travel % of Mgmt Fees', 'travel',       false)}
+  ${mfVR('Utilities % of Management Fees',         'utilities',    false)}
+  ${mfVR('Rent % of Management Fees',              'rent',         false)}
+  ${mfVR('Total Expenses % of Management Fees',    'total_opex',   false, true)}
+  ${sHdr('Management Fee % of Collections', true)}
+  ${wVR('Total Collections',              'mgmt_coll_total',   false, true,  true)}
+  ${wVR('ACH Deal Collections',           'mgmt_coll_ach_deal',false, true)}
+  ${wVR('Asset Backed Collections',       'mgmt_coll_asset',   false, true)}
+  ${wVR('Reverse Consolidation Collections','mgmt_coll_rev_con',false,true)}
+  ${wVR('ACH Collections',               'mgmt_coll_ach',      false, true)}
+  ${wVR('Wire Transfer Collections',     'mgmt_coll_wire',     false, true)}
+  ${wVR('Payments from MCA Collections', 'mgmt_coll_mca',      false, true)}
+  ${wVR('Other Collections',             'mgmt_coll_other',    false, true)}
+  ${wVR('Total Management Fees',         'mgmt_total_fees',    false, true,  true)}
+  ${wVR('Management Fee %',              'mgmt_fee_pct',       true,  true,  true)}
+
+  ${sHdr('Portfolio Metrics')}
+  ${sHdr('Funded', true)}
+  ${pVR('Funded Units',                  'cnt',          false, true,  true, fmtCount)}
+  ${pVR('Average Deal Size',             'avgDealSize',  false, true,  false)}
+  ${pVR('Average Factor Rate',           'avgFactor',    false, true,  false, fmtFact)}
+  ${pVR('Average Deal Length (days)',    'avgTerm',      false, true,  false, fmtDays)}
+  ${pVR('Commissions',                   'commission',   false, false)}
+  ${pVR('Commissions % of Funded',       'commPctFunded',true,  false)}
+  ${pVR('Merchant Bank Fee',             'bankFee',      false, false)}
+  ${pVR('Bank Fees % of Funded',         'bankPctFunded',true,  false)}
+  ${sHdr('Total RTR', true)}
+  ${pVR('Total RTR',                     'rtr',          false, true,  true)}
+  ${pVR('Collected Amount',              'collected',    false, true)}
+  ${pVR('Management Fees',              'mgmtFee',      false, true)}
+  ${pVR('Discounts',                     'discounts',    false, false)}
+  ${pVR('Remaining RTR',                 'remaining',    false, false)}
+  ${pVR('Recovery Rate',                 'recRate',      true,  true,  true)}
+  ${sHdr('Outstanding', true)}
+  ${pVR('Performing',                    'performing',     false, true,  false, fmtCount)}
+  ${pVR('Closed, Complete',              'closedComplete', false, true,  false, fmtCount)}
+  ${pVR('Closed, Incomplete',            'closedIncomplete',false,true,  false, fmtCount)}
+  ${pVR('Collection',                    'collection',     false, null,  false, fmtCount)}
+  ${pVR('In-House Collections',          'inHouseCollect', false, null,  false, fmtCount)}
+  ${pVR('Bankruptcy',                    'bankruptcy',     false, false, false, fmtCount)}
+  ${pVR('Legal',                         'legal',          false, false, false, fmtCount)}
+  ${pVR('In-House Legal',                'inHouseLegal',   false, false, false, fmtCount)}
+  ${pVR('Under-Performing',              'underPerforming',false, false, false, fmtCount)}
+  ${pVR('Syndication Default',           'syndDefault',    false, false, false, fmtCount)}
+  ${pVR('Pending',                       'pending',        false, null,  false, fmtCount)}
+  ${pVR('Modification',                  'modification',   false, null,  false, fmtCount)}
+  ${sHdr('Default Rate', true)}
+  ${pVR('Deals Defaulted',               'defaultCount',   false, false, false, fmtCount)}
+  ${pVR('% of Deals Defaulted',          'defaultPct',     true,  false, true)}
+  ${pVR('Write-Offs',                    'writeOff',       false, false)}
+
   </tbody>`;
 }
 
