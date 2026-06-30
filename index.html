@@ -4134,6 +4134,23 @@ function buildFSSummaryTables(deals){
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
+  // Fallback row: workbook data for periods that have it, deal-computed data otherwise
+  function fRow(label, wbdField, dmKey, isPct, bold){
+    const lStyle = bold
+      ? 'font-weight:700;padding-left:8px'
+      : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => {
+      const wb = (wbd[p]||{})[wbdField];
+      return cell(wb != null ? wb : (dm[p]||{})[dmKey], isPct, bold);
+    }).join('');
+    const tot = showTotal ? (() => {
+      const wb = allWbd[wbdField];
+      return cell(wb != null ? wb : allDm[dmKey], isPct, bold);
+    })() : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+
   // ── Header row ──────────────────────────────────────────────────
   const thCols  = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
   const thTotal = showTotal ? `<th style="text-align:right;color:var(--purple);white-space:nowrap">Total</th>` : '';
@@ -4184,9 +4201,9 @@ function buildFSSummaryTables(deals){
     ${sHdr('Cost of Goods Sold', true)}
     ${dRow('Commission Expenses',                'commission',       false, false)}
     ${wRow('Other Cost of Goods Sold',           'other_cogs',       false, false)}
-    ${wRow('Total Cost of Goods Sold',           'total_cogs',       false, true)}
-    ${wRow('Gross Profit',                       'gross_profit',     false, true)}
-    ${wRow('Gross Margin %',                     'gross_margin_pct', true,  false)}
+    ${fRow('Total Cost of Goods Sold',           'total_cogs',       'totalCogs',    false, true)}
+    ${fRow('Gross Profit',                       'gross_profit',     'grossProfit',  false, true)}
+    ${fRow('Gross Margin %',                     'gross_margin_pct', 'grossMargin',  true,  false)}
     ${sHdr('Operating Expenses', true)}
     ${dRow('Bank Fees & Service Charges',        'bankFee',          false, false)}
     ${wRow('Office Expenses',                    'office_exp',       false, false)}
@@ -4200,15 +4217,15 @@ function buildFSSummaryTables(deals){
     ${wRow('Rent Expenses',                      'rent',             false, false)}
     ${wRow('Total for Expenses',                 'total_opex',       false, true)}
     ${wRow('Expenses % of Revenue',              'exp_pct_rev',      true,  false)}
-    ${wRow('EBITDA',                             'ebitda',           false, true)}
+    ${fRow('EBITDA',                             'ebitda',           'ebitda',       false, true)}
     ${wRow('Other Income',                       'other_income',     false, false)}
     ${wRow('Other Expenses',                     'other_exp',        false, false)}
     ${wRow('Research and Development',           'rd_exp',           false, false)}
     ${wRow('Interest Expense',                   'interest_exp',     false, false)}
     ${wRow('Depreciation',                       'depreciation',     false, false)}
     ${wRow('Taxes',                              'taxes',            false, false)}
-    ${wRow('Net Income',                         'net_income',       false, true)}
-    ${wRow('Net Income % of Revenue',            'net_income_pct',   true,  false)}
+    ${fRow('Net Income',                         'net_income',       'netIncome',    false, true)}
+    ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',     true,  false)}
     ${wRow('Growth',                             'growth',           true,  false)}
 
     ${sHdr('KPIs / Profit & Loss Metrics')}
@@ -4217,29 +4234,29 @@ function buildFSSummaryTables(deals){
     ${wRow('Monthly Fee Income % of Funded',         'kpi_monthly_pct_funded',    true, false)}
     ${wRow('Commission Fee Income % of Funded',      'kpi_comm_fee_pct_funded',   true, false)}
     ${wRow('Default Fee Income % of Funded',         'kpi_default_pct_funded',    true, false)}
-    ${wRow('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',       true, false)}
-    ${wRow('Total Income % of Funded',               'total_income_pct_funded',   true, true)}
+    ${fRow('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',       'mgmtPctFunded',   true, false)}
+    ${wRow('Total Income % of Funded',               'total_income_pct_funded',                      true, true)}
     ${sHdr('Income As % of Collections', true)}
     ${wRow('Collection Fee Income % of Collections', 'kpi_coll_fee_pct_coll',     true, false)}
     ${wRow('Monthly Fee Income % of Collections',    'kpi_monthly_pct_coll',      true, false)}
     ${wRow('Commission Fee Income % of Collections', 'kpi_comm_fee_pct_coll',     true, false)}
     ${wRow('Default Fee Income % of Collections',    'kpi_default_pct_coll',      true, false)}
-    ${wRow('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',         true, false)}
+    ${fRow('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',         'mgmtPctColl',     true, false)}
     ${wRow('Total Income % of Collections',          'total_income_pct_coll',     true, true)}
     ${sHdr('Cost of Goods Sold As % of Funded Amount', true)}
-    ${wRow('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded',   true, false)}
+    ${fRow('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded',   'commPctFunded',   true, false)}
     ${wRow('Other COGS % of Funded',                 'kpi_other_cogs_pct_funded', true, false)}
-    ${wRow('Total COGS % of Funded',                 'total_cogs_pct_funded',     true, true)}
+    ${fRow('Total COGS % of Funded',                 'total_cogs_pct_funded',     'commPctFunded',   true, true)}
     ${sHdr('Expenses As % of Funded Amount', true)}
-    ${wRow('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded',   true, false)}
+    ${fRow('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded',   'bankPctFunded',   true, false)}
     ${wRow('Office Expenses % of Funded',            'kpi_office_pct_funded',     true, false)}
     ${wRow('Software Expense % of Funded',           'kpi_software_pct_funded',   true, false)}
     ${wRow('Payroll % of Funded',                    'kpi_payroll_pct_funded',    true, false)}
     ${wRow('Professional Fees % of Funded',          'kpi_proffees_pct_funded',   true, false)}
     ${wRow('Sales & Marketing % of Funded',          'kpi_sales_pct_funded',      true, false)}
     ${wRow('Rent % of Funded',                       'kpi_rent_pct_funded',       true, false)}
-    ${wRow('Total Expenses % of Funded',             'total_exp_pct_funded',      true, true)}
-    ${wRow('Net Income % of Funded',                 'net_income_pct_funded',     true, true)}
+    ${fRow('Total Expenses % of Funded',             'total_exp_pct_funded',      'bankPctFunded',   true, true)}
+    ${fRow('Net Income % of Funded',                 'net_income_pct_funded',     'netPctFunded',    true, true)}
     ${sHdr('Expenses As % of Origination Income', true)}
     ${wRow('Bank Fees % of Origination Income',      'kpi_bankfees_pct_orig',     true, false)}
     ${wRow('Office Expenses % of Origination Income','kpi_office_pct_orig',       true, false)}
@@ -4439,6 +4456,12 @@ function buildFSVarianceTables(deals){
     const pv = pW.mgmt_fee_income ? (pW[numF]||0)/pW.mgmt_fee_income : null;
     return varRow(label, cv, pv, true, higher, bold);
   }
+  // Fallback: workbook field first, deal-computed key if workbook has no data for that period
+  function fVR(label, wbdField, cdKey, isPct, higher, bold){
+    const cv = cW[wbdField] != null ? cW[wbdField] : cD[cdKey] ?? null;
+    const pv = pW[wbdField] != null ? pW[wbdField] : pD[cdKey] ?? null;
+    return varRow(label, cv, pv, isPct, higher, bold);
+  }
 
   const fmtCount = v => Math.round(v).toString();
   const fmtFact  = v => v.toFixed(4);
@@ -4496,9 +4519,9 @@ function buildFSVarianceTables(deals){
   ${sHdr('Cost of Goods Sold', true)}
   ${dVR('Commission Expenses',           'commission',        false, false)}
   ${wVR('Other Cost of Goods Sold',      'other_cogs',        false, false)}
-  ${wVR('Total Cost of Goods Sold',      'total_cogs',        false, false, true)}
-  ${wVR('Gross Profit',                  'gross_profit',      false, true,  true)}
-  ${wVR('Gross Margin %',                'gross_margin_pct',  true,  true)}
+  ${fVR('Total Cost of Goods Sold',      'total_cogs',        'totalCogs',   false, false, true)}
+  ${fVR('Gross Profit',                  'gross_profit',      'grossProfit', false, true,  true)}
+  ${fVR('Gross Margin %',                'gross_margin_pct',  'grossMargin', true,  true)}
   ${sHdr('Operating Expenses', true)}
   ${dVR('Bank Fees & Service Charges',   'bankFee',           false, false)}
   ${wVR('Office Expenses',               'office_exp',        false, false)}
@@ -4512,15 +4535,15 @@ function buildFSVarianceTables(deals){
   ${wVR('Rent Expenses',                 'rent',              false, false)}
   ${wVR('Total for Expenses',            'total_opex',        false, false, true)}
   ${wVR('Expenses % of Revenue',         'exp_pct_rev',       true,  false)}
-  ${wVR('EBITDA',                        'ebitda',            false, true,  true)}
+  ${fVR('EBITDA',                        'ebitda',            'ebitda',      false, true,  true)}
   ${wVR('Other Income',                  'other_income',      false, true)}
   ${wVR('Other Expenses',                'other_exp',         false, false)}
   ${wVR('Research and Development',      'rd_exp',            false, false)}
   ${wVR('Interest Expense',              'interest_exp',      false, false)}
   ${wVR('Depreciation',                  'depreciation',      false, false)}
   ${wVR('Taxes',                         'taxes',             false, false)}
-  ${wVR('Net Income',                    'net_income',        false, true,  true)}
-  ${wVR('Net Income % of Revenue',       'net_income_pct',    true,  true)}
+  ${fVR('Net Income',                    'net_income',        'netIncome',   false, true,  true)}
+  ${fVR('Net Income % of Revenue',       'net_income_pct',    'niPctRev',    true,  true)}
   ${wVR('Growth',                        'growth',            true,  true)}
 
   ${sHdr('KPIs / Profit & Loss Metrics')}
@@ -4529,21 +4552,21 @@ function buildFSVarianceTables(deals){
   ${wVR('Monthly Fee Income % of Funded',         'kpi_monthly_pct_funded',    true, true)}
   ${wVR('Commission Fee Income % of Funded',      'kpi_comm_fee_pct_funded',   true, true)}
   ${wVR('Default Fee Income % of Funded',         'kpi_default_pct_funded',    true, true)}
-  ${wVR('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',       true, true)}
+  ${fVR('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',   'mgmtPctFunded', true, true)}
   ${wVR('Total Income As % of Funded Amount',     'total_income_pct_funded',   true, true, true)}
   ${sHdr('Income As % of Collections', true)}
   ${wVR('Collection Fee Income % of Collections', 'kpi_coll_fee_pct_coll',     true, true)}
   ${wVR('Monthly Fee Income % of Collections',    'kpi_monthly_pct_coll',      true, true)}
   ${wVR('Commission Fee Income % of Collections', 'kpi_comm_fee_pct_coll',     true, true)}
   ${wVR('Default Fee Income % of Collections',    'kpi_default_pct_coll',      true, true)}
-  ${wVR('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',         true, true)}
+  ${fVR('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',     'mgmtPctColl',   true, true)}
   ${wVR('Total Income As % of Collections',       'total_income_pct_coll',     true, true, true)}
   ${sHdr('Cost of Goods Sold As % of Funded Amount', true)}
-  ${wVR('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded',   true, false)}
+  ${fVR('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded','commPctFunded', true, false)}
   ${wVR('Other COGS % of Funded',                 'kpi_other_cogs_pct_funded', true, false)}
-  ${wVR('Total COGS As % of Funded',              'total_cogs_pct_funded',     true, false, true)}
+  ${fVR('Total COGS As % of Funded',              'total_cogs_pct_funded',  'commPctFunded', true, false, true)}
   ${sHdr('Expenses As % of Funded Amount', true)}
-  ${wVR('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded',   true, false)}
+  ${fVR('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded','bankPctFunded', true, false)}
   ${wVR('Office Expenses % of Funded',            'kpi_office_pct_funded',     true, false)}
   ${wVR('Software Expense % of Funded',           'kpi_software_pct_funded',   true, false)}
   ${wVR('Payroll % of Funded',                    'kpi_payroll_pct_funded',    true, false)}
@@ -4551,8 +4574,8 @@ function buildFSVarianceTables(deals){
   ${cVR('Insurance % of Funded',                  'insurance',    'total_funded', false, false)}
   ${cVR('Utilities % of Funded',                  'utilities',    'total_funded', false, false)}
   ${wVR('Rent % of Funded',                       'kpi_rent_pct_funded',       true, false)}
-  ${wVR('Total Expenses As % of Funded',          'total_exp_pct_funded',      true, false, true)}
-  ${wVR('Net Income As % of Funded',              'net_income_pct_funded',     true, true,  true)}
+  ${fVR('Total Expenses As % of Funded',          'total_exp_pct_funded',   'bankPctFunded', true, false, true)}
+  ${fVR('Net Income As % of Funded',              'net_income_pct_funded',  'netPctFunded',  true, true,  true)}
   ${sHdr('Expenses As % of Origination Income', true)}
   ${wVR('Bank Fees % of Origination Income',       'kpi_bankfees_pct_orig',    true, false)}
   ${wVR('Office Expenses % of Origination Income', 'kpi_office_pct_orig',      true, false)}
@@ -4572,7 +4595,7 @@ function buildFSVarianceTables(deals){
   ${cVR('Payroll % of Revenue',                    'payroll_total','total_income', false, false)}
   ${wVR('Professional Fees % of Revenue',          'kpi_proffees_pct_rev',     true, false)}
   ${wVR('Sales & Marketing % of Revenue',          'kpi_sales_pct_rev',        true, false)}
-  ${wVR('Net Income % of Revenue',                 'net_income_pct',           true, true)}
+  ${fVR('Net Income % of Revenue',                 'net_income_pct',           'niPctRev', true, true)}
   ${cVR('Transportation & Travel % of Revenue',    'travel',       'total_income', false, false)}
   ${cVR('Utilities % of Revenue',                  'utilities',    'total_income', false, false)}
   ${cVR('Rent % of Revenue',                       'rent',         'total_income', false, false)}
