@@ -4061,11 +4061,14 @@ function buildFSSummaryTables(deals){
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(d);
   });
-  const periods = Object.keys(byPeriod).sort();
+  const allSortedPeriods = Object.keys(byPeriod).sort();
+  // Cap to the 12 most recent periods
+  const periods = allSortedPeriods.slice(-12);
 
   const sub = document.getElementById('fsSummarySub');
   const gbLabel = STATE.groupBy==='month'?'Monthly':STATE.groupBy==='quarter'?'Quarterly':'Annual';
-  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''}`;
+  const clipped = allSortedPeriods.length > periods.length;
+  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''}${clipped?' (most recent 12)':''}`;
 
   const tbl = document.getElementById('fsSummaryTable');
   if(!tbl) return;
@@ -4074,13 +4077,14 @@ function buildFSSummaryTables(deals){
     return;
   }
 
-  // Deal-computed metrics per period (respects all filters)
+  // Deal-computed metrics per period (respects all filters, capped to displayed periods)
   const dm = {}, wbd = {};
   periods.forEach(p => {
     dm[p]  = computeFSMetrics(byPeriod[p]);
     wbd[p] = getFSWbRow(p);
   });
-  const allDm  = computeFSMetrics(deals);
+  const periodDeals = periods.flatMap(p => byPeriod[p] || []);
+  const allDm  = computeFSMetrics(periodDeals);
   const allWbd = getFSWbAllPeriods(periods);
 
   const N = periods.length, showTotal = N > 1;
