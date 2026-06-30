@@ -5222,6 +5222,14 @@ function buildFSVarianceTables(deals){
     const pv = pW[wbdField] != null ? pW[wbdField] : pD[cdKey] ?? null;
     return varRow(label, cv, pv, isPct, higher, bold);
   }
+  // Cross-source KPI: QB dollar amount (wbd) divided by deal-computed denominator (portMetrics)
+  // Used for all "X as % of Funded" and "X as % of Collections" rows where the numerator
+  // comes from the uploaded P&L but the denominator comes from deal data.
+  function kVR(label, wbdNum, pmDenom, higher, bold){
+    const cv = cW[wbdNum] != null && cPM[pmDenom] ? cW[wbdNum] / cPM[pmDenom] : null;
+    const pv = pW[wbdNum] != null && pPM[pmDenom] ? pW[wbdNum] / pPM[pmDenom] : null;
+    return varRow(label, cv, pv, true, higher, bold);
+  }
 
   const fmtCount = v => Math.round(v).toString();
   const fmtFact  = v => v.toFixed(4);
@@ -5308,70 +5316,70 @@ function buildFSVarianceTables(deals){
 
   ${sHdr('KPIs / Profit & Loss Metrics')}
   ${sHdr('Income As % of Funded Amount', true)}
-  ${wVR('Collection Fee Income % of Funded',      'kpi_coll_fee_pct_funded',   true, true)}
-  ${wVR('Monthly Fee Income % of Funded',         'kpi_monthly_pct_funded',    true, true)}
-  ${wVR('Commission Fee Income % of Funded',      'kpi_comm_fee_pct_funded',   true, true)}
-  ${wVR('Default Fee Income % of Funded',         'kpi_default_pct_funded',    true, true)}
-  ${fVR('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',   'mgmtPctFunded', true, true)}
-  ${wVR('Total Income As % of Funded Amount',     'total_income_pct_funded',   true, true, true)}
-  ${sHdr('Income As % of Collections', true)}
-  ${wVR('Collection Fee Income % of Collections', 'kpi_coll_fee_pct_coll',     true, true)}
-  ${wVR('Monthly Fee Income % of Collections',    'kpi_monthly_pct_coll',      true, true)}
-  ${wVR('Commission Fee Income % of Collections', 'kpi_comm_fee_pct_coll',     true, true)}
-  ${wVR('Default Fee Income % of Collections',    'kpi_default_pct_coll',      true, true)}
-  ${fVR('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',     'mgmtPctColl',   true, true)}
-  ${wVR('Total Income As % of Collections',       'total_income_pct_coll',     true, true, true)}
+  ${kVR('Collection Fee Income',           'coll_fee_income',    'funded',    true)}
+  ${kVR('Monthly Fee Income',              'monthly_fee_income', 'funded',    true)}
+  ${kVR('Commission Fee Income',           'comm_fee_income',    'funded',    true)}
+  ${kVR('Default Fee Income',              'default_fee_income', 'funded',    true)}
+  ${kVR('Management Fee Income',           'mgmt_fee_income',    'funded',    true)}
+  ${kVR('Total Income As % of Funded Amount','total_income',     'funded',    true, true)}
+  ${sHdr('Income As % of Collection', true)}
+  ${kVR('Collection Fee Income',           'coll_fee_income',    'collected', true)}
+  ${kVR('Monthly Fee Income',              'monthly_fee_income', 'collected', true)}
+  ${kVR('Commission Fee Income',           'comm_fee_income',    'collected', true)}
+  ${kVR('Default Fee Income',              'default_fee_income', 'collected', true)}
+  ${kVR('Management Fee Income',           'mgmt_fee_income',    'collected', true)}
+  ${kVR('Total Income As % of Collection', 'total_income',       'collected', true, true)}
   ${sHdr('Cost of Goods Sold As % of Funded Amount', true)}
-  ${fVR('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded','commPctFunded', true, false)}
-  ${wVR('Other COGS % of Funded',                 'kpi_other_cogs_pct_funded', true, false)}
-  ${fVR('Total COGS As % of Funded',              'total_cogs_pct_funded',  'commPctFunded', true, false, true)}
-  ${sHdr('Expenses As % of Funded Amount', true)}
-  ${fVR('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded','bankPctFunded', true, false)}
-  ${wVR('Office Expenses % of Funded',            'kpi_office_pct_funded',     true, false)}
-  ${wVR('Software Expense % of Funded',           'kpi_software_pct_funded',   true, false)}
-  ${wVR('Payroll % of Funded',                    'kpi_payroll_pct_funded',    true, false)}
-  ${wVR('Professional Fees % of Funded',          'kpi_proffees_pct_funded',   true, false)}
-  ${cVR('Insurance % of Funded',                  'insurance',    'total_funded', false, false)}
-  ${cVR('Utilities % of Funded',                  'utilities',    'total_funded', false, false)}
-  ${wVR('Rent % of Funded',                       'kpi_rent_pct_funded',       true, false)}
-  ${fVR('Total Expenses As % of Funded',          'total_exp_pct_funded',   'bankPctFunded', true, false, true)}
-  ${fVR('Net Income As % of Funded',              'net_income_pct_funded',  'netPctFunded',  true, true,  true)}
-  ${sHdr('Expenses As % of Origination Income', true)}
-  ${wVR('Bank Fees % of Origination Income',       'kpi_bankfees_pct_orig',    true, false)}
-  ${wVR('Office Expenses % of Origination Income', 'kpi_office_pct_orig',      true, false)}
-  ${wVR('Software Expense % of Origination Income','kpi_software_pct_orig',    true, false)}
-  ${cVR('Payroll % of Origination Income',         'payroll_total','orig_income',  false, false)}
-  ${wVR('Professional Fees % of Origination Income','kpi_proffees_pct_orig',   true, false)}
-  ${wVR('Sales & Marketing % of Origination Income','kpi_sales_pct_orig',      true, false)}
-  ${cVR('Insurance % of Origination Income',       'insurance',    'orig_income',  false, false)}
-  ${wVR('Transportation & Travel % of Origination Income','kpi_travel_pct_orig',true,false)}
-  ${cVR('Utilities % of Origination Income',       'utilities',    'orig_income',  false, false)}
-  ${wVR('Rent % of Origination Income',            'kpi_rent_pct_orig',        true, false)}
-  ${wVR('Total Expenses As % of Origination Income','total_exp_pct_orig',      true, false, true)}
-  ${sHdr('Expenses As % of Revenue', true)}
-  ${wVR('Bank Fees % of Revenue',                  'kpi_bankfees_pct_rev',     true, false)}
-  ${wVR('Office Expenses % of Revenue',            'kpi_office_pct_rev',       true, false)}
-  ${wVR('Software Expense % of Revenue',           'kpi_software_pct_rev',     true, false)}
-  ${cVR('Payroll % of Revenue',                    'payroll_total','total_income', false, false)}
-  ${wVR('Professional Fees % of Revenue',          'kpi_proffees_pct_rev',     true, false)}
-  ${wVR('Sales & Marketing % of Revenue',          'kpi_sales_pct_rev',        true, false)}
-  ${fVR('Net Income % of Revenue',                 'net_income_pct',           'niPctRev', true, true)}
-  ${cVR('Transportation & Travel % of Revenue',    'travel',       'total_income', false, false)}
-  ${cVR('Utilities % of Revenue',                  'utilities',    'total_income', false, false)}
-  ${cVR('Rent % of Revenue',                       'rent',         'total_income', false, false)}
-  ${wVR('Total Expenses As % of Revenue',          'total_exp_pct_rev',        true, false, true)}
-  ${sHdr('Expenses As % of Management Fees', true)}
-  ${mfVR('Bank Fees % of Management Fees',         'bank_fees',    false)}
-  ${mfVR('Office Expenses % of Management Fees',   'office_exp',   false)}
-  ${mfVR('Software Expense % of Management Fees',  'software_exp', false)}
-  ${mfVR('Payroll % of Management Fees',           'payroll_total',false)}
-  ${mfVR('Professional Fees % of Management Fees', 'prof_fees',    false)}
-  ${mfVR('Sales & Marketing % of Management Fees', 'sales_mktg',   false)}
-  ${mfVR('Net Income % of Management Fees',        'net_income',   true)}
-  ${mfVR('Transportation & Travel % of Mgmt Fees', 'travel',       false)}
-  ${mfVR('Utilities % of Management Fees',         'utilities',    false)}
-  ${mfVR('Rent % of Management Fees',              'rent',         false)}
-  ${mfVR('Total Expenses % of Management Fees',    'total_opex',   false, true)}
+  ${kVR('Commission Expenses',             'comm_exp',           'funded',    false)}
+  ${kVR('Other Cost of Goods Sold',        'other_cogs',         'funded',    false)}
+  ${kVR('Total Cost of Goods Sold As % of Funded Amount','total_cogs','funded',false,true)}
+  ${sHdr('Expenses as % of Funded Amount', true)}
+  ${kVR('Bank Fees & Service Charges',     'bank_fees',          'funded',    false)}
+  ${kVR('Office Expenses',                 'office_exp',         'funded',    false)}
+  ${kVR('Software Expense',                'software_exp',       'funded',    false)}
+  ${kVR('Payroll and Related Expenses',    'payroll_total',      'funded',    false)}
+  ${kVR('Professional Fees',               'prof_fees',          'funded',    false)}
+  ${kVR('Insurance',                       'insurance',          'funded',    false)}
+  ${kVR('Utilities',                       'utilities',          'funded',    false)}
+  ${kVR('Rent Expenses',                   'rent',               'funded',    false)}
+  ${kVR('Total Expenses as % of Funded Amount','total_opex',     'funded',    false, true)}
+  ${kVR('Net Income as % of Funded Amount','net_income',         'funded',    true,  true)}
+  ${sHdr('Expenses as % of Origination Income', true)}
+  ${wVR('Bank Fees & Service Charges',     'kpi_bankfees_pct_orig',  true, false)}
+  ${wVR('Office Expenses',                 'kpi_office_pct_orig',    true, false)}
+  ${wVR('Software Expense',                'kpi_software_pct_orig',  true, false)}
+  ${cVR('Payroll and Related Expenses',    'payroll_total','orig_income', false, false)}
+  ${wVR('Professional Fees',               'kpi_proffees_pct_orig',  true, false)}
+  ${wVR('Sales & Marketing Expenses',      'kpi_sales_pct_orig',     true, false)}
+  ${cVR('Insurance',                       'insurance',   'orig_income', false, false)}
+  ${wVR('Transportation and Travel',       'kpi_travel_pct_orig',    true, false)}
+  ${cVR('Utilities',                       'utilities',   'orig_income', false, false)}
+  ${wVR('Rent Expenses',                   'kpi_rent_pct_orig',      true, false)}
+  ${wVR('Total Expenses as % of Origination Income','total_exp_pct_orig',true,false,true)}
+  ${sHdr('Expenses as % of Revenue', true)}
+  ${wVR('Bank Fees & Service Charges',     'kpi_bankfees_pct_rev',   true, false)}
+  ${wVR('Office Expenses',                 'kpi_office_pct_rev',     true, false)}
+  ${wVR('Software Expense',                'kpi_software_pct_rev',   true, false)}
+  ${cVR('Payroll and Related Expenses',    'payroll_total','total_income', false, false)}
+  ${wVR('Professional Fees',               'kpi_proffees_pct_rev',   true, false)}
+  ${wVR('Sales & Marketing Expenses',      'kpi_sales_pct_rev',      true, false)}
+  ${fVR('Net Income',                      'net_income_pct',     'niPctRev', true, true)}
+  ${cVR('Transportation and Travel',       'travel',      'total_income', false, false)}
+  ${cVR('Utilities',                       'utilities',   'total_income', false, false)}
+  ${cVR('Rent Expenses',                   'rent',        'total_income', false, false)}
+  ${wVR('Total Expenses as % of Revenue',  'total_exp_pct_rev',      true, false, true)}
+  ${sHdr('Expenses as % of Management Fees', true)}
+  ${mfVR('Bank Fees & Service Charges',    'bank_fees',    false)}
+  ${mfVR('Office Expenses',                'office_exp',   false)}
+  ${mfVR('Software Expense',               'software_exp', false)}
+  ${mfVR('Payroll and Related Expenses',   'payroll_total',false)}
+  ${mfVR('Professional Fees',              'prof_fees',    false)}
+  ${mfVR('Sales & Marketing Expenses',     'sales_mktg',   false)}
+  ${mfVR('Net Income',                     'net_income',   true)}
+  ${mfVR('Transportation and Travel',      'travel',       false)}
+  ${mfVR('Utilities',                      'utilities',    false)}
+  ${mfVR('Rent Expenses',                  'rent',         false)}
+  ${mfVR('Total Expenses as % of Management Fees','total_opex',false,true)}
   ${sHdr('Management Fee % of Collections', true)}
   ${wVR('Total Collections',              'mgmt_coll_total',   false, true,  true)}
   ${wVR('ACH Deal Collections',           'mgmt_coll_ach_deal',false, true)}
