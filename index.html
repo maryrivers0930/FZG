@@ -4413,12 +4413,17 @@ function computeFSMetrics(deals){
 
 function buildFSWorkbookSections(deals){
   deals = deals || getFilteredDeals();
-  // Populate variance period dropdowns from available periods in filtered data
+  // Populate variance period dropdowns from available periods in filtered data + uploaded FS data
   const byPeriod = {};
   deals.forEach(d => {
     const k = periodKey(d.fundedDate, STATE.groupBy);
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(d);
+  });
+  Object.keys(STATE.fsData).forEach(fsKey => {
+    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+    const k = periodKey(fsKey + '-15', STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
   });
   const periods = Object.keys(byPeriod).sort();
   const currSel = document.getElementById('varCurrSel');
@@ -4464,6 +4469,12 @@ function buildFSSummaryTables(deals){
     const k = periodKey(d.fundedDate, STATE.groupBy);
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(d);
+  });
+  // Include periods that exist in uploaded financial statements even if no deals fall in that period
+  Object.keys(STATE.fsData).forEach(fsKey => {
+    if(!fsKey.match(/^\d{4}-\d{2}$/)) return; // monthly keys only; year keys derived below
+    const k = periodKey(fsKey + '-15', STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
   });
   const allSortedPeriods = Object.keys(byPeriod).sort();
   // Cap to the 12 most recent periods
@@ -4724,6 +4735,12 @@ function buildFSVarianceTables(deals){
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(d);
   });
+  // Include periods that exist in uploaded financial statements even if no deals fall in that period
+  Object.keys(STATE.fsData).forEach(fsKey => {
+    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+    const k = periodKey(fsKey + '-15', STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+  });
   const periods = Object.keys(byPeriod).sort();
   const tbl = document.getElementById('fsVarTable');
   const sub = document.getElementById('fsVarianceSub');
@@ -4736,8 +4753,8 @@ function buildFSVarianceTables(deals){
 
   const currSel  = document.getElementById('varCurrSel');
   const priorSel = document.getElementById('varPriorSel');
-  const cP = (currSel  && byPeriod[currSel.value])  ? currSel.value  : periods[periods.length - 1];
-  const pP = (priorSel && byPeriod[priorSel.value]) ? priorSel.value : periods[periods.length - 2];
+  const cP = (currSel  && periods.includes(currSel.value))  ? currSel.value  : periods[periods.length - 1];
+  const pP = (priorSel && periods.includes(priorSel.value)) ? priorSel.value : periods[periods.length - 2];
   const cLbl = periodLabel(cP, STATE.groupBy);
   const pLbl = periodLabel(pP, STATE.groupBy);
   if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
