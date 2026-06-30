@@ -3873,7 +3873,49 @@ function getFSWbRow(periodK){
     agg.gross_margin_pct = agg.total_income ? agg.gross_profit/agg.total_income : 0;
     agg.exp_pct_rev = agg.total_income ? agg.total_opex/agg.total_income : 0;
     agg.net_income_pct = agg.total_income ? agg.net_income/agg.total_income : 0;
-    agg.growth = null; // not meaningful for aggregated quarter
+    agg.growth = null;
+    // Recalculate KPI ratios from summed quarter totals
+    const _fi=agg.total_income,_fc=agg.mgmt_coll_total,_ff=agg.total_funded||0,
+          _fo=agg.orig_income,_fe=agg.total_opex,_fmf=agg.mgmt_fee_income;
+    agg.kpi_coll_fee_pct_funded=_ff?agg.coll_fee_income/_ff:null;
+    agg.kpi_monthly_pct_funded=_ff?agg.monthly_fee_income/_ff:null;
+    agg.kpi_comm_fee_pct_funded=_ff?agg.comm_fee_income/_ff:null;
+    agg.kpi_default_pct_funded=_ff?agg.default_fee_income/_ff:null;
+    agg.kpi_mgmt_pct_funded=_ff?(_fmf||0)/_ff:null;
+    agg.total_income_pct_funded=_ff?_fi/_ff:null;
+    agg.kpi_coll_fee_pct_coll=_fc?agg.coll_fee_income/_fc:null;
+    agg.kpi_monthly_pct_coll=_fc?agg.monthly_fee_income/_fc:null;
+    agg.kpi_comm_fee_pct_coll=_fc?agg.comm_fee_income/_fc:null;
+    agg.kpi_default_pct_coll=_fc?agg.default_fee_income/_fc:null;
+    agg.kpi_mgmt_pct_coll=_fc?(_fmf||0)/_fc:null;
+    agg.total_income_pct_coll=_fc?_fi/_fc:null;
+    agg.kpi_comm_exp_pct_funded=_ff?agg.comm_exp/_ff:null;
+    agg.kpi_other_cogs_pct_funded=_ff?agg.other_cogs/_ff:null;
+    agg.total_cogs_pct_funded=_ff?agg.total_cogs/_ff:null;
+    agg.kpi_bankfees_pct_funded=_ff?agg.bank_fees/_ff:null;
+    agg.kpi_office_pct_funded=_ff?agg.office_exp/_ff:null;
+    agg.kpi_software_pct_funded=_ff?agg.software_exp/_ff:null;
+    agg.kpi_payroll_pct_funded=_ff?agg.payroll_total/_ff:null;
+    agg.kpi_proffees_pct_funded=_ff?agg.prof_fees/_ff:null;
+    agg.kpi_sales_pct_funded=_ff?agg.sales_mktg/_ff:null;
+    agg.kpi_rent_pct_funded=_ff?agg.rent/_ff:null;
+    agg.total_exp_pct_funded=_ff?_fe/_ff:null;
+    agg.net_income_pct_funded=_ff?agg.net_income/_ff:null;
+    agg.kpi_bankfees_pct_orig=_fo?agg.bank_fees/_fo:null;
+    agg.kpi_office_pct_orig=_fo?agg.office_exp/_fo:null;
+    agg.kpi_software_pct_orig=_fo?agg.software_exp/_fo:null;
+    agg.kpi_proffees_pct_orig=_fo?agg.prof_fees/_fo:null;
+    agg.kpi_sales_pct_orig=_fo?agg.sales_mktg/_fo:null;
+    agg.kpi_travel_pct_orig=_fo?agg.travel/_fo:null;
+    agg.kpi_rent_pct_orig=_fo?agg.rent/_fo:null;
+    agg.total_exp_pct_orig=_fo?_fe/_fo:null;
+    agg.kpi_bankfees_pct_rev=_fi?agg.bank_fees/_fi:null;
+    agg.kpi_office_pct_rev=_fi?agg.office_exp/_fi:null;
+    agg.kpi_software_pct_rev=_fi?agg.software_exp/_fi:null;
+    agg.kpi_proffees_pct_rev=_fi?agg.prof_fees/_fi:null;
+    agg.kpi_sales_pct_rev=_fi?agg.sales_mktg/_fi:null;
+    agg.total_exp_pct_rev=_fi?_fe/_fi:null;
+    agg.mgmt_fee_pct=_fc?(agg.mgmt_total_fees||0)/_fc:null;
     return agg;
   }
   return {};
@@ -3889,6 +3931,48 @@ function getFSWbAllPeriods(periods){
   agg.exp_pct_rev = agg.total_income ? agg.total_opex/agg.total_income : 0;
   agg.net_income_pct = agg.total_income ? agg.net_income/agg.total_income : 0;
   agg.growth = null;
+  // Recalculate KPI ratios from summed totals
+  const fi = agg.total_income, fc = agg.mgmt_coll_total, ff = agg.total_funded||0;
+  const fo = agg.orig_income, fe = agg.total_opex, fmf = agg.mgmt_fee_income;
+  agg.kpi_coll_fee_pct_funded   = ff ? agg.coll_fee_income/ff : null;
+  agg.kpi_monthly_pct_funded    = ff ? agg.monthly_fee_income/ff : null;
+  agg.kpi_comm_fee_pct_funded   = ff ? agg.comm_fee_income/ff : null;
+  agg.kpi_default_pct_funded    = ff ? agg.default_fee_income/ff : null;
+  agg.kpi_mgmt_pct_funded       = ff ? (fmf||0)/ff : null;
+  agg.total_income_pct_funded   = ff ? fi/ff : null;
+  agg.kpi_coll_fee_pct_coll     = fc ? agg.coll_fee_income/fc : null;
+  agg.kpi_monthly_pct_coll      = fc ? agg.monthly_fee_income/fc : null;
+  agg.kpi_comm_fee_pct_coll     = fc ? agg.comm_fee_income/fc : null;
+  agg.kpi_default_pct_coll      = fc ? agg.default_fee_income/fc : null;
+  agg.kpi_mgmt_pct_coll         = fc ? (fmf||0)/fc : null;
+  agg.total_income_pct_coll     = fc ? fi/fc : null;
+  agg.kpi_comm_exp_pct_funded   = ff ? agg.comm_exp/ff : null;
+  agg.kpi_other_cogs_pct_funded = ff ? agg.other_cogs/ff : null;
+  agg.total_cogs_pct_funded     = ff ? agg.total_cogs/ff : null;
+  agg.kpi_bankfees_pct_funded   = ff ? agg.bank_fees/ff : null;
+  agg.kpi_office_pct_funded     = ff ? agg.office_exp/ff : null;
+  agg.kpi_software_pct_funded   = ff ? agg.software_exp/ff : null;
+  agg.kpi_payroll_pct_funded    = ff ? agg.payroll_total/ff : null;
+  agg.kpi_proffees_pct_funded   = ff ? agg.prof_fees/ff : null;
+  agg.kpi_sales_pct_funded      = ff ? agg.sales_mktg/ff : null;
+  agg.kpi_rent_pct_funded       = ff ? agg.rent/ff : null;
+  agg.total_exp_pct_funded      = ff ? fe/ff : null;
+  agg.net_income_pct_funded     = ff ? agg.net_income/ff : null;
+  agg.kpi_bankfees_pct_orig     = fo ? agg.bank_fees/fo : null;
+  agg.kpi_office_pct_orig       = fo ? agg.office_exp/fo : null;
+  agg.kpi_software_pct_orig     = fo ? agg.software_exp/fo : null;
+  agg.kpi_proffees_pct_orig     = fo ? agg.prof_fees/fo : null;
+  agg.kpi_sales_pct_orig        = fo ? agg.sales_mktg/fo : null;
+  agg.kpi_travel_pct_orig       = fo ? agg.travel/fo : null;
+  agg.kpi_rent_pct_orig         = fo ? agg.rent/fo : null;
+  agg.total_exp_pct_orig        = fo ? fe/fo : null;
+  agg.kpi_bankfees_pct_rev      = fi ? agg.bank_fees/fi : null;
+  agg.kpi_office_pct_rev        = fi ? agg.office_exp/fi : null;
+  agg.kpi_software_pct_rev      = fi ? agg.software_exp/fi : null;
+  agg.kpi_proffees_pct_rev      = fi ? agg.prof_fees/fi : null;
+  agg.kpi_sales_pct_rev         = fi ? agg.sales_mktg/fi : null;
+  agg.total_exp_pct_rev         = fi ? fe/fi : null;
+  agg.mgmt_fee_pct              = fc ? (agg.mgmt_total_fees||0)/fc : null;
   return agg;
 }
 
@@ -4123,24 +4207,86 @@ function buildFSSummaryTables(deals){
     ${wRow('Net Income % of Revenue',            'net_income_pct',   true,  false)}
     ${wRow('Growth',                             'growth',           true,  false)}
 
-    ${sHdr('Portfolio Metrics')}
-    ${dRow('Deal Count',                         'cnt',              false, false)}
-    ${dRow('Total Funded',                       'funded',           false, false)}
-    ${dRow('Total Collected',                    'collected',        false, false)}
-    ${dRow('Total RTR',                          'rtr',              false, false)}
-    ${dRow('Remaining RTR',                      'remaining',        false, false)}
-    ${dRow('Recovery Rate',                      'recRate',          true,  true)}
-    ${sHdr('P&L Metrics — % of Funded', true)}
-    ${dRow('Management Fee %',                   'mgmtPctFunded',    true,  false)}
-    ${dRow('Commission %',                       'commPctFunded',    true,  false)}
-    ${dRow('Bank Fee %',                         'bankPctFunded',    true,  false)}
-    ${dRow('Net Income %',                       'netPctFunded',     true,  true)}
-    ${sHdr('P&L Metrics — % of Collections', true)}
-    ${dRow('Management Fee %',                   'mgmtPctColl',      true,  false)}
-    ${dRow('Commission %',                       'commPctColl',      true,  false)}
-    ${sHdr('Write-Offs & Discounts', true)}
-    ${dRow('Write-Offs',                         'writeOff',         false, false)}
-    ${dRow('Discounts',                          'discounts',        false, false)}
+    ${sHdr('KPIs / Profit & Loss Metrics')}
+    ${sHdr('Income As % of Funded Amount', true)}
+    ${wRow('Collection Fee Income % of Funded',      'kpi_coll_fee_pct_funded',   true, false)}
+    ${wRow('Monthly Fee Income % of Funded',         'kpi_monthly_pct_funded',    true, false)}
+    ${wRow('Commission Fee Income % of Funded',      'kpi_comm_fee_pct_funded',   true, false)}
+    ${wRow('Default Fee Income % of Funded',         'kpi_default_pct_funded',    true, false)}
+    ${wRow('Management Fee Income % of Funded',      'kpi_mgmt_pct_funded',       true, false)}
+    ${wRow('Total Income % of Funded',               'total_income_pct_funded',   true, true)}
+    ${sHdr('Income As % of Collections', true)}
+    ${wRow('Collection Fee Income % of Collections', 'kpi_coll_fee_pct_coll',     true, false)}
+    ${wRow('Monthly Fee Income % of Collections',    'kpi_monthly_pct_coll',      true, false)}
+    ${wRow('Commission Fee Income % of Collections', 'kpi_comm_fee_pct_coll',     true, false)}
+    ${wRow('Default Fee Income % of Collections',    'kpi_default_pct_coll',      true, false)}
+    ${wRow('Management Fee Income % of Collections', 'kpi_mgmt_pct_coll',         true, false)}
+    ${wRow('Total Income % of Collections',          'total_income_pct_coll',     true, true)}
+    ${sHdr('Cost of Goods Sold As % of Funded Amount', true)}
+    ${wRow('Commission Expenses % of Funded',        'kpi_comm_exp_pct_funded',   true, false)}
+    ${wRow('Other COGS % of Funded',                 'kpi_other_cogs_pct_funded', true, false)}
+    ${wRow('Total COGS % of Funded',                 'total_cogs_pct_funded',     true, true)}
+    ${sHdr('Expenses As % of Funded Amount', true)}
+    ${wRow('Bank Fees % of Funded',                  'kpi_bankfees_pct_funded',   true, false)}
+    ${wRow('Office Expenses % of Funded',            'kpi_office_pct_funded',     true, false)}
+    ${wRow('Software Expense % of Funded',           'kpi_software_pct_funded',   true, false)}
+    ${wRow('Payroll % of Funded',                    'kpi_payroll_pct_funded',    true, false)}
+    ${wRow('Professional Fees % of Funded',          'kpi_proffees_pct_funded',   true, false)}
+    ${wRow('Sales & Marketing % of Funded',          'kpi_sales_pct_funded',      true, false)}
+    ${wRow('Rent % of Funded',                       'kpi_rent_pct_funded',       true, false)}
+    ${wRow('Total Expenses % of Funded',             'total_exp_pct_funded',      true, true)}
+    ${wRow('Net Income % of Funded',                 'net_income_pct_funded',     true, true)}
+    ${sHdr('Expenses As % of Origination Income', true)}
+    ${wRow('Bank Fees % of Origination Income',      'kpi_bankfees_pct_orig',     true, false)}
+    ${wRow('Office Expenses % of Origination Income','kpi_office_pct_orig',       true, false)}
+    ${wRow('Software Expense % of Origination Income','kpi_software_pct_orig',   true, false)}
+    ${wRow('Professional Fees % of Origination Income','kpi_proffees_pct_orig',  true, false)}
+    ${wRow('Sales & Marketing % of Origination Income','kpi_sales_pct_orig',     true, false)}
+    ${wRow('Transportation & Travel % of Origination Income','kpi_travel_pct_orig',true,false)}
+    ${wRow('Rent % of Origination Income',           'kpi_rent_pct_orig',         true, false)}
+    ${wRow('Total Expenses % of Origination Income', 'total_exp_pct_orig',        true, true)}
+    ${sHdr('Expenses As % of Revenue', true)}
+    ${wRow('Bank Fees % of Revenue',                 'kpi_bankfees_pct_rev',      true, false)}
+    ${wRow('Office Expenses % of Revenue',           'kpi_office_pct_rev',        true, false)}
+    ${wRow('Software Expense % of Revenue',          'kpi_software_pct_rev',      true, false)}
+    ${wRow('Professional Fees % of Revenue',         'kpi_proffees_pct_rev',      true, false)}
+    ${wRow('Sales & Marketing % of Revenue',         'kpi_sales_pct_rev',         true, false)}
+    ${wRow('Total Expenses % of Revenue',            'total_exp_pct_rev',         true, true)}
+    ${(()=>{
+      // Expenses As % of Management Fees — computed dynamically as each_expense / mgmt_fee_income
+      function cRow(label, numField, bold){
+        const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
+        const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+        const cells = periods.map(p => {
+          const w = wbd[p] || {};
+          const ratio = w.mgmt_fee_income ? (w[numField]||0) / w.mgmt_fee_income : null;
+          return cell(ratio, true, bold);
+        }).join('');
+        const tot = showTotal ? (()=>{
+          const ratio = allWbd.mgmt_fee_income ? (allWbd[numField]||0) / allWbd.mgmt_fee_income : null;
+          return cell(ratio, true, bold);
+        })() : '';
+        return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+      }
+      return sHdr('Expenses As % of Management Fees', true)
+        + cRow('Bank Fees % of Management Fees',           'bank_fees',    false)
+        + cRow('Office Expenses % of Management Fees',     'office_exp',   false)
+        + cRow('Software Expense % of Management Fees',    'software_exp', false)
+        + cRow('Professional Fees % of Management Fees',   'prof_fees',    false)
+        + cRow('Sales & Marketing % of Management Fees',   'sales_mktg',   false)
+        + cRow('Total Expenses % of Management Fees',      'total_opex',   true);
+    })()}
+    ${sHdr('Management Fee % of Collections', true)}
+    ${wRow('Total Collections',                      'mgmt_coll_total',           false, true)}
+    ${wRow('ACH Deal Collections',                   'mgmt_coll_ach_deal',        false, false)}
+    ${wRow('Asset Backed Collections',               'mgmt_coll_asset',           false, false)}
+    ${wRow('Reverse Consolidation Collections',      'mgmt_coll_rev_con',         false, false)}
+    ${wRow('ACH Collections',                        'mgmt_coll_ach',             false, false)}
+    ${wRow('Wire Transfer Collections',              'mgmt_coll_wire',            false, false)}
+    ${wRow('Payments from MCA Collections',          'mgmt_coll_mca',             false, false)}
+    ${wRow('Other Collections',                      'mgmt_coll_other',           false, false)}
+    ${wRow('Total Management Fees',                  'mgmt_total_fees',           false, true)}
+    ${wRow('Management Fee %',                       'mgmt_fee_pct',              true,  true)}
   </tbody>`;
 }
 
