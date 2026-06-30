@@ -3878,13 +3878,18 @@ function matchIsoHeight(){
   const card  = document.getElementById('isoLeftCard');
   const wrap  = document.getElementById('isoTblWrap');
   if(!right || !card || !wrap) return;
+  // Collapse ISO card first so it doesn't inflate the grid row height,
+  // then measure the right column's natural height independently.
+  card.style.height = '0px';
+  card.style.overflow = 'hidden';
+  void card.offsetHeight; // force reflow so right column can shrink to natural height
   const h = right.offsetHeight;
-  if(h < 10) return;
+  if(h < 10){ card.style.height = ''; card.style.overflow = ''; return; }
   card.style.height = h + 'px';
-  // tbl-wrap fills remaining space inside card minus header height
   const hdr = card.querySelector('.section-hdr');
   const hdrH = hdr ? hdr.offsetHeight : 44;
   wrap.style.height = (h - hdrH) + 'px';
+  wrap.style.overflowY = 'auto';
 }
 
 function buildFSSummaryTables(deals){
