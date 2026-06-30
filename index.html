@@ -4757,6 +4757,7 @@ function switchTab(t){
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
+  if(t==='cover') matchIsoHeight();
   if(t==='recovery') requestAnimationFrame(()=>{
     try{ buildRecoveryTab(); }
     catch(e){
