@@ -563,16 +563,16 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     </div>
 
     <!-- ISO/Brokers + simple volume tables -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch">
-      <div class="section" style="margin:0;display:flex;flex-direction:column">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
+      <div class="section" id="isoLeftCard" style="margin:0;display:flex;flex-direction:column;overflow:hidden">
         <div class="section-hdr" style="flex-shrink:0">
           <span class="section-title">Top ISO / Brokers</span>
           <input id="isoSearch" type="text" placeholder="Search…" oninput="filterIsoTable(this.value)"
             style="margin-left:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:3px 8px;width:140px;outline:none"/>
         </div>
-        <div class="tbl-wrap" style="flex:1;overflow-y:auto;max-height:none"><table class="data-tbl" id="coverIsoTable"></table></div>
+        <div class="tbl-wrap" id="isoTblWrap" style="overflow-y:auto"><table class="data-tbl" id="coverIsoTable"></table></div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:14px">
+      <div id="isoRightCol" style="display:flex;flex-direction:column;gap:14px">
         <div class="section" style="margin:0">
           <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span></div>
           <div id="coverFundingAmtBars"></div>
@@ -612,59 +612,27 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="tbl-wrap"><table class="data-tbl" id="coverDealTable"></table></div>
     </div>
 
-    <!-- FS Summary (workbook data) -->
+    <!-- FS Summary -->
     <div class="section" style="margin-top:20px" id="fsSummarySection">
       <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsSummaryBody')">
         <span class="section-title">FS Summary</span>
-        <span class="section-sub">
-          <select id="fsPeriodSel" onchange="buildFSWorkbookSections(getFilteredDeals())" onclick="event.stopPropagation()"
-            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer;margin-left:8px"></select>
-          <span style="margin-left:12px;font-size:11px;color:var(--muted)" id="fsSummarySub"></span>
-        </span>
+        <span class="section-sub" id="fsSummarySub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
         <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsSummaryToggle">▲ collapse</span>
       </div>
       <div id="fsSummaryBody">
-        <!-- Balance Sheet -->
-        <div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">Balance Sheet</div>
-          <div class="tbl-wrap"><table class="data-tbl" id="fsBSTable" style="min-width:420px"></table></div>
-        </div>
-        <!-- Income Statement -->
-        <div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">Income Statement</div>
-          <div class="tbl-wrap"><table class="data-tbl" id="fsISTable" style="min-width:420px"></table></div>
-        </div>
-        <!-- P&L KPIs -->
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px">P&amp;L Metrics</div>
-          <div class="tbl-wrap"><table class="data-tbl" id="fsKpiTable" style="min-width:420px"></table></div>
-        </div>
+        <div class="tbl-wrap" id="fsSummaryTblWrap"><table class="data-tbl" id="fsSummaryTable"></table></div>
       </div>
     </div>
 
-    <!-- Variance Analysis (workbook data) -->
+    <!-- Variance Analysis -->
     <div class="section" style="margin-top:16px" id="fsVarianceSection">
       <div class="section-hdr" style="cursor:pointer" onclick="toggleFSSection('fsVarianceBody')">
         <span class="section-title">Variance Analysis</span>
-        <span class="section-sub">
-          <select id="varCurrSel" onchange="buildFSWorkbookSections(getFilteredDeals())" onclick="event.stopPropagation()"
-            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer;margin-left:8px"></select>
-          <span style="color:var(--muted);font-size:11px;margin:0 4px">vs.</span>
-          <select id="varPriorSel" onchange="buildFSWorkbookSections(getFilteredDeals())" onclick="event.stopPropagation()"
-            style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;cursor:pointer"></select>
-        </span>
+        <span class="section-sub" id="fsVarianceSub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
         <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="fsVarianceToggle">▲ collapse</span>
       </div>
       <div id="fsVarianceBody">
-        <div class="tbl-wrap"><table class="data-tbl" id="fsVarBSTable" style="min-width:600px"></table></div>
-        <div style="margin-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">Income Statement Variance</div>
-          <div class="tbl-wrap"><table class="data-tbl" id="fsVarISTable" style="min-width:600px"></table></div>
-        </div>
-        <div style="margin-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">P&amp;L Metrics Variance</div>
-          <div class="tbl-wrap"><table class="data-tbl" id="fsVarKpiTable" style="min-width:600px"></table></div>
-        </div>
+        <div class="tbl-wrap"><table class="data-tbl" id="fsVarTable" style="min-width:600px"></table></div>
       </div>
     </div>
   </div>
@@ -3893,152 +3861,155 @@ function computeFSMetrics(deals){
     netPctFunded:  funded?netIncome/funded:0,
     grossMargin:   mgmtFee?grossProfit/mgmtFee:0,
     recRate:       funded?(collected/funded):0,
+    niPctRev:      mgmtFee?netIncome/mgmtFee:0,
   };
 }
 
 function buildFSWorkbookSections(deals){
   deals = deals || getFilteredDeals();
-  // Period selectors — populated from filtered deal periods
-  const availPeriods = [...new Set(deals.map(d=>d.fundedDate?.slice(0,7)).filter(Boolean))].sort().reverse();
-  // Also add FY options if multi-year span
-  const years = [...new Set(availPeriods.map(p=>p.slice(0,4)))];
-  const allOptions = [...availPeriods, ...years];
-
-  const fsSel = document.getElementById('fsPeriodSel');
-  if(fsSel){
-    const prev = fsSel.value;
-    fsSel.innerHTML = allOptions.map(p=>`<option value="${p}">${fsPeriodLabel(p)}</option>`).join('');
-    fsSel.value = (prev && allOptions.includes(prev)) ? prev : (allOptions[0]||'');
-  }
-  const currSel = document.getElementById('varCurrSel');
-  const priorSel= document.getElementById('varPriorSel');
-  if(currSel && priorSel){
-    const prevC=currSel.value, prevP=priorSel.value;
-    const opts=allOptions.map(p=>`<option value="${p}">${fsPeriodLabel(p)}</option>`).join('');
-    currSel.innerHTML=opts; priorSel.innerHTML=opts;
-    currSel.value = (prevC && allOptions.includes(prevC)) ? prevC : (allOptions[0]||'');
-    priorSel.value= (prevP && allOptions.includes(prevP)) ? prevP : (allOptions[1]||allOptions[0]||'');
-  }
   buildFSSummaryTables(deals);
   buildFSVarianceTables(deals);
+  // Match ISO card height to right column after render
+  requestAnimationFrame(matchIsoHeight);
+}
+
+function matchIsoHeight(){
+  const right = document.getElementById('isoRightCol');
+  const card  = document.getElementById('isoLeftCard');
+  const wrap  = document.getElementById('isoTblWrap');
+  if(!right || !card || !wrap) return;
+  const h = right.offsetHeight;
+  if(h < 10) return;
+  card.style.height = h + 'px';
+  // tbl-wrap fills remaining space inside card minus header height
+  const hdr = card.querySelector('.section-hdr');
+  const hdrH = hdr ? hdr.offsetHeight : 44;
+  wrap.style.height = (h - hdrH) + 'px';
 }
 
 function buildFSSummaryTables(deals){
   deals = deals || getFilteredDeals();
-  const sel = document.getElementById('fsPeriodSel');
-  const period = sel ? sel.value : '';
+
+  // Group deals by period using the same Group By as the rest of the dashboard
+  const byPeriod = {};
+  deals.forEach(d => {
+    const k = periodKey(d.fundedDate, STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+    byPeriod[k].push(d);
+  });
+  const periods = Object.keys(byPeriod).sort();
+
+  // Update subtitle
   const sub = document.getElementById('fsSummarySub');
-  if(sub) sub.textContent = fsPeriodLabel(period);
+  const gbLabel = STATE.groupBy === 'month' ? 'Monthly' : STATE.groupBy === 'quarter' ? 'Quarterly' : 'Annual';
+  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''} · from filtered deals`;
 
-  // Filter deals to selected period
-  const pDeals = period ? deals.filter(d=>{
-    const dp = d.fundedDate?.slice(0,7)||'';
-    return period.length===4 ? dp.startsWith(period) : dp===period;
-  }) : deals;
-  const m = computeFSMetrics(pDeals);
-
-  // Workbook Balance Sheet for the period (static — from accounting system)
-  const wb = FS_WORKBOOK_DATA[period] || FS_WORKBOOK_DATA[period+'-12'] || {};
-
-  function fsRow(label, val, isPct, isBold, isHdr){
-    if(isHdr) return `<tr style="background:rgba(139,92,246,.08)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
-    const bold = isBold ? 'font-weight:700;' : '';
-    const bg = isBold ? 'background:rgba(88,166,255,.06)' : '';
-    const color = isBold ? 'color:var(--blue)' : 'color:var(--text)';
-    const disp = val==null ? '—' : isPct ? (val*100).toFixed(2)+'%' : fmtFS(val,false);
-    return `<tr style="${bg}"><td style="${bold}padding-left:${isBold?'8':'20'}px">${label}</td><td style="text-align:right;${bold}${color}">${disp}</td></tr>`;
+  const tbl = document.getElementById('fsSummaryTable');
+  if(!tbl) return;
+  if(!periods.length){
+    tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">No deal data for current filters</td></tr></tbody>';
+    return;
   }
 
-  // Balance Sheet (from workbook — accounting system data)
-  const bsTbl = document.getElementById('fsBSTable');
-  if(bsTbl){
-    const hasBs = Object.keys(wb).length > 0;
-    bsTbl.innerHTML = hasBs ? `<thead><tr><th>Line Item</th><th style="text-align:right">Amount <span style="font-size:9px;color:var(--muted);font-weight:400">(QuickBooks)</span></th></tr></thead><tbody>
-      ${fsRow('ASSETS',null,false,false,true)}
-      ${fsRow('Cash and Cash Equivalents', wb.cash)}
-      ${fsRow('Accounts Receivable', wb.ar)}
-      ${fsRow('Other Current Assets', wb.other_ca)}
-      ${fsRow('Total Current Assets', wb.total_ca,false,true)}
-      ${fsRow('Total Non-Current Assets', wb.total_nca,false,false)}
-      ${fsRow('Total Assets', wb.total_assets,false,true)}
-      ${fsRow('LIABILITIES',null,false,false,true)}
-      ${fsRow('Syndicate Partners Payable', wb.synd_payable)}
-      ${fsRow('ISO Commissions Payable', wb.iso_payable)}
-      ${fsRow('Deferred Income', wb.deferred_income)}
-      ${fsRow('Credit Card', wb.credit_card)}
-      ${fsRow('Total Current Liabilities', wb.total_cl,false,true)}
-      ${fsRow('Total Liabilities', wb.total_liab,false,true)}
-      ${fsRow('EQUITY',null,false,false,true)}
-      ${fsRow('Retained Earnings', wb.retained_earnings)}
-      ${fsRow('Net Income (BS)', wb.net_income_bs)}
-      ${fsRow('Total Equity', wb.total_equity,false,true)}
-      ${fsRow('Total Liabilities and Equity', wb.total_liab_equity,false,true)}
-    </tbody>` : `<tbody><tr><td colspan="2" style="color:var(--muted);padding:16px;text-align:center">Balance Sheet data not available for this period in workbook</td></tr></tbody>`;
+  // Compute metrics for each period
+  const metrics = {};
+  periods.forEach(p => { metrics[p] = computeFSMetrics(byPeriod[p]); });
+
+  // Also compute totals column
+  const allM = computeFSMetrics(deals);
+
+  const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
+  const N = periods.length;
+  const showTotal = N > 1;
+
+  function fmtC(val, isPct){
+    if(val == null) return '<td style="text-align:right;color:var(--muted)">—</td>';
+    const disp = isPct ? (val*100).toFixed(2)+'%' : fmtFS(val, false);
+    return `<td style="text-align:right">${disp}</td>`;
+  }
+  function fmtCBold(val, isPct){
+    if(val == null) return '<td style="text-align:right;color:var(--blue);font-weight:700">—</td>';
+    const disp = isPct ? (val*100).toFixed(2)+'%' : fmtFS(val, false);
+    return `<td style="text-align:right;font-weight:700;color:var(--blue)">${disp}</td>`;
+  }
+  function hdrRow(label){
+    return `<tr style="background:rgba(139,92,246,.08)"><td colspan="${N + 1 + (showTotal?1:0)}" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
+  }
+  function dataRow(label, key, isPct, isBold){
+    const fmt = isBold ? fmtCBold : fmtC;
+    const rowBg = isBold ? 'style="background:rgba(88,166,255,.06)"' : '';
+    const lStyle = isBold ? 'style="font-weight:700;padding-left:8px"' : 'style="padding-left:20px;color:var(--muted)"';
+    const cells = periods.map(p => fmt(metrics[p][key], isPct)).join('');
+    const totalCell = showTotal ? fmt(allM[key], isPct) : '';
+    return `<tr ${rowBg}><td ${lStyle}>${label}</td>${cells}${totalCell}</tr>`;
   }
 
-  // Income Statement — computed from filtered deals
-  const isTbl = document.getElementById('fsISTable');
-  if(isTbl) isTbl.innerHTML = `<thead><tr><th>Line Item</th><th style="text-align:right">Amount <span style="font-size:9px;color:var(--muted);font-weight:400">(from ${pDeals.length} filtered deals)</span></th></tr></thead><tbody>
-    ${fsRow('INCOME',null,false,false,true)}
-    ${fsRow('Management Fee Income', m.mgmtFee)}
-    ${fsRow('Total Income', m.mgmtFee,false,true)}
-    ${fsRow('COST OF GOODS SOLD',null,false,false,true)}
-    ${fsRow('Commission Expenses (ISO)', m.commission)}
-    ${fsRow('Total Cost of Goods Sold', m.totalCogs,false,true)}
-    ${fsRow('Gross Profit', m.grossProfit,false,true)}
-    ${fsRow('Gross Margin %', m.grossMargin,true)}
-    ${fsRow('OPERATING EXPENSES',null,false,false,true)}
-    ${fsRow('Bank Fees', m.bankFee)}
-    ${fsRow('Total Operating Expenses', m.totalOpex,false,true)}
-    ${fsRow('EBITDA', m.ebitda,false,true)}
-    ${fsRow('Net Income', m.netIncome,false,true)}
-    ${fsRow('Net Income % of Revenue', m.mgmtFee?m.netIncome/m.mgmtFee:0,true)}
-  </tbody>`;
+  const thCols = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
+  const thTotal = showTotal ? `<th style="text-align:right;color:var(--purple);white-space:nowrap">Total</th>` : '';
+  const thead = `<thead><tr><th style="min-width:220px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
 
-  // P&L KPIs — computed from filtered deals
-  const kpiTbl = document.getElementById('fsKpiTable');
-  if(kpiTbl) kpiTbl.innerHTML = `<thead><tr><th>KPI</th><th style="text-align:right">Value</th></tr></thead><tbody>
-    ${fsRow('PORTFOLIO SUMMARY',null,false,false,true)}
-    ${fsRow('Total Funded', m.funded)}
-    ${fsRow('Total Collected', m.collected)}
-    ${fsRow('Total RTR', m.rtr)}
-    ${fsRow('Remaining RTR', m.remaining)}
-    ${fsRow('Deal Count', m.cnt!=null?m.cnt:null)}
-    ${fsRow('Recovery Rate', m.recRate,true,true)}
-    ${fsRow('INCOME AS % OF FUNDED',null,false,false,true)}
-    ${fsRow('Management Fee % of Funded', m.mgmtPctFunded,true)}
-    ${fsRow('Total Income % of Funded', m.mgmtPctFunded,true,true)}
-    ${fsRow('INCOME AS % OF COLLECTIONS',null,false,false,true)}
-    ${fsRow('Management Fee % of Collections', m.mgmtPctColl,true)}
-    ${fsRow('Total Income % of Collections', m.mgmtPctColl,true,true)}
-    ${fsRow('EXPENSES AS % OF FUNDED',null,false,false,true)}
-    ${fsRow('Commission Exp % of Funded', m.commPctFunded,true)}
-    ${fsRow('Bank Fees % of Funded', m.bankPctFunded,true)}
-    ${fsRow('Total Expenses % of Funded', (m.commPctFunded+m.bankPctFunded),true,true)}
-    ${fsRow('Net Income % of Funded', m.netPctFunded,true,true)}
-    ${fsRow('WRITE-OFFS & DISCOUNTS',null,false,false,true)}
-    ${fsRow('Write-Offs', m.writeOff)}
-    ${fsRow('Discounts', m.discounts)}
+  tbl.innerHTML = thead + `<tbody>
+    ${hdrRow('Income Statement')}
+    ${dataRow('Management Fee Income',   'mgmtFee',      false, false)}
+    ${dataRow('Total Income',            'mgmtFee',      false, true)}
+    ${dataRow('Commission Expenses (ISO)','commission',  false, false)}
+    ${dataRow('Total COGS',              'totalCogs',    false, true)}
+    ${dataRow('Gross Profit',            'grossProfit',  false, true)}
+    ${dataRow('Gross Margin %',          'grossMargin',  true,  false)}
+    ${dataRow('Bank Fees',               'bankFee',      false, false)}
+    ${dataRow('Total OpEx',              'totalOpex',    false, true)}
+    ${dataRow('EBITDA',                  'ebitda',       false, true)}
+    ${dataRow('Net Income',              'netIncome',    false, true)}
+    ${dataRow('Net Income % of Revenue', 'niPctRev',     true,  false)}
+    ${hdrRow('Portfolio')}
+    ${dataRow('Total Funded',            'funded',       false, false)}
+    ${dataRow('Total Collected',         'collected',    false, false)}
+    ${dataRow('Total RTR',               'rtr',          false, false)}
+    ${dataRow('Remaining RTR',           'remaining',    false, false)}
+    ${dataRow('Recovery Rate',           'recRate',      true,  true)}
+    ${hdrRow('P&L Metrics (% of Funded)')}
+    ${dataRow('Management Fee %',        'mgmtPctFunded',true,  false)}
+    ${dataRow('Commission %',            'commPctFunded',true,  false)}
+    ${dataRow('Bank Fee %',              'bankPctFunded',true,  false)}
+    ${dataRow('Net Income %',            'netPctFunded', true,  true)}
+    ${hdrRow('P&L Metrics (% of Collections)')}
+    ${dataRow('Management Fee %',        'mgmtPctColl',  true,  false)}
+    ${dataRow('Commission %',            'commPctColl',  true,  false)}
+    ${hdrRow('Write-Offs & Discounts')}
+    ${dataRow('Write-Offs',              'writeOff',     false, false)}
+    ${dataRow('Discounts',               'discounts',    false, false)}
   </tbody>`;
 }
 
 function buildFSVarianceTables(deals){
   deals = deals || getFilteredDeals();
-  const currSel = document.getElementById('varCurrSel');
-  const priorSel= document.getElementById('varPriorSel');
-  const cP = currSel ? currSel.value : '';
-  const pP = priorSel? priorSel.value: '';
 
-  function periodDeals(period){
-    if(!period) return [];
-    return deals.filter(d=>{
-      const dp = d.fundedDate?.slice(0,7)||'';
-      return period.length===4 ? dp.startsWith(period) : dp===period;
-    });
+  // Auto-detect most-recent two periods from filtered deals using Group By
+  const byPeriod = {};
+  deals.forEach(d => {
+    const k = periodKey(d.fundedDate, STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+    byPeriod[k].push(d);
+  });
+  const periods = Object.keys(byPeriod).sort();
+  const tbl = document.getElementById('fsVarTable');
+  const sub = document.getElementById('fsVarianceSub');
+  if(!tbl) return;
+  if(periods.length < 2){
+    if(sub) sub.textContent = '';
+    tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">Need at least two periods in the filtered dataset to show variance</td></tr></tbody>';
+    return;
   }
-  const cDeals = periodDeals(cP), pDeals = periodDeals(pP);
-  const C = computeFSMetrics(cDeals), P = computeFSMetrics(pDeals);
-  const cLbl = fsPeriodLabel(cP)||'Current', pLbl = fsPeriodLabel(pP)||'Prior';
+
+  // Latest two periods
+  const cP = periods[periods.length - 1];
+  const pP = periods[periods.length - 2];
+  const cLbl = periodLabel(cP, STATE.groupBy);
+  const pLbl = periodLabel(pP, STATE.groupBy);
+  if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
+
+  const C = computeFSMetrics(byPeriod[cP]);
+  const P = computeFSMetrics(byPeriod[pP]);
 
   function varRow(label, cv, pv, isPct, higherBetter, isBold, isHdr){
     if(isHdr) return `<tr style="background:rgba(139,92,246,.08)"><td colspan="5" style="font-weight:700;font-size:11px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px">${label}</td></tr>`;
@@ -4053,62 +4024,38 @@ function buildFSVarianceTables(deals){
     const bg   = isBold?'background:rgba(88,166,255,.06)':'';
     return `<tr style="${bg}">
       <td style="${bold}padding-left:${isBold?'8':'20'}px">${label}</td>
-      <td style="text-align:right;${bold}">${fmt(cv||0)}</td>
+      <td style="text-align:right;${bold}color:var(--blue)">${fmt(cv||0)}</td>
       <td style="text-align:right;color:var(--muted)">${fmt(pv||0)}</td>
       <td style="text-align:right">${diffStr}</td>
       <td class="${dir}" style="text-align:right">${arrow} ${pctStr}</td>
     </tr>`;
   }
 
-  const hdr = `<thead><tr><th>Metric</th><th style="text-align:right">${cLbl}</th><th style="text-align:right;color:var(--muted)">${pLbl}</th><th style="text-align:right">Change</th><th style="text-align:right">% Chg</th></tr></thead>`;
-
-  // Portfolio + income variance
-  const bsTbl = document.getElementById('fsVarBSTable');
-  if(bsTbl) bsTbl.innerHTML = `<caption style="text-align:left;font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;padding:4px 0">Portfolio Variance (from filtered deals)</caption>${hdr}<tbody>
-    ${varRow('DEAL VOLUME',null,null,false,true,false,true)}
-    ${varRow('Deal Count', C.cnt, P.cnt,false,true,true)}
-    ${varRow('Total Funded', C.funded, P.funded,false,true,true)}
-    ${varRow('Total RTR', C.rtr, P.rtr,false,true)}
-    ${varRow('COLLECTIONS',null,null,false,true,false,true)}
-    ${varRow('Total Collected', C.collected, P.collected,false,true,true)}
-    ${varRow('Remaining RTR', C.remaining, P.remaining,false,false)}
-    ${varRow('Recovery Rate', C.recRate, P.recRate,true,true,true)}
-    ${varRow('FEES',null,null,false,true,false,true)}
-    ${varRow('Management Fees', C.mgmtFee, P.mgmtFee,false,true)}
-    ${varRow('ISO Commissions', C.commission, P.commission,false,false)}
-    ${varRow('Bank Fees', C.bankFee, P.bankFee,false,false)}
-    ${varRow('Write-Offs', C.writeOff, P.writeOff,false,false)}
-    ${varRow('Discounts', C.discounts, P.discounts,false,false)}
-  </tbody>`;
-
-  const isTbl = document.getElementById('fsVarISTable');
-  if(isTbl) isTbl.innerHTML = `${hdr}<tbody>
-    ${varRow('INCOME',null,null,false,true,false,true)}
+  tbl.innerHTML = `<thead><tr><th>Metric</th><th style="text-align:right">${cLbl}</th><th style="text-align:right;color:var(--muted)">${pLbl}</th><th style="text-align:right">Change</th><th style="text-align:right">% Chg</th></tr></thead><tbody>
+    ${varRow('INCOME STATEMENT',null,null,false,true,false,true)}
     ${varRow('Management Fee Income', C.mgmtFee, P.mgmtFee,false,true)}
     ${varRow('Total Income', C.mgmtFee, P.mgmtFee,false,true,true)}
-    ${varRow('COST OF GOODS SOLD',null,null,false,false,false,true)}
     ${varRow('Commission Expenses', C.commission, P.commission,false,false)}
     ${varRow('Total COGS', C.totalCogs, P.totalCogs,false,false,true)}
     ${varRow('Gross Profit', C.grossProfit, P.grossProfit,false,true,true)}
     ${varRow('Gross Margin %', C.grossMargin, P.grossMargin,true,true)}
-    ${varRow('OPERATING EXPENSES',null,null,false,false,false,true)}
     ${varRow('Bank Fees', C.bankFee, P.bankFee,false,false)}
-    ${varRow('Total OpEx', C.totalOpex, P.totalOpex,false,false,true)}
     ${varRow('EBITDA', C.ebitda, P.ebitda,false,true,true)}
     ${varRow('Net Income', C.netIncome, P.netIncome,false,true,true)}
-    ${varRow('Net Income % of Revenue', C.mgmtFee?C.netIncome/C.mgmtFee:0, P.mgmtFee?P.netIncome/P.mgmtFee:0,true,true)}
-  </tbody>`;
-
-  const kpiTbl = document.getElementById('fsVarKpiTable');
-  if(kpiTbl) kpiTbl.innerHTML = `${hdr}<tbody>
-    ${varRow('AS % OF FUNDED',null,null,false,true,false,true)}
-    ${varRow('Management Fee % of Funded', C.mgmtPctFunded, P.mgmtPctFunded,true,true)}
-    ${varRow('Commission % of Funded', C.commPctFunded, P.commPctFunded,true,false)}
-    ${varRow('Bank Fee % of Funded', C.bankPctFunded, P.bankPctFunded,true,false)}
-    ${varRow('Net Income % of Funded', C.netPctFunded, P.netPctFunded,true,true,true)}
-    ${varRow('AS % OF COLLECTIONS',null,null,false,true,false,true)}
-    ${varRow('Management Fee % of Collections', C.mgmtPctColl, P.mgmtPctColl,true,true)}
-    ${varRow('Commission % of Collections', C.commPctColl, P.commPctColl,true,false)}
+    ${varRow('Net Income % of Revenue', C.niPctRev, P.niPctRev,true,true)}
+    ${varRow('PORTFOLIO',null,null,false,true,false,true)}
+    ${varRow('Deal Count', C.cnt, P.cnt,false,true,true)}
+    ${varRow('Total Funded', C.funded, P.funded,false,true,true)}
+    ${varRow('Total Collected', C.collected, P.collected,false,true,true)}
+    ${varRow('Remaining RTR', C.remaining, P.remaining,false,false)}
+    ${varRow('Recovery Rate', C.recRate, P.recRate,true,true,true)}
+    ${varRow('Write-Offs', C.writeOff, P.writeOff,false,false)}
+    ${varRow('Discounts', C.discounts, P.discounts,false,false)}
+    ${varRow('P&L METRICS (% OF FUNDED)',null,null,false,true,false,true)}
+    ${varRow('Management Fee %', C.mgmtPctFunded, P.mgmtPctFunded,true,true)}
+    ${varRow('Commission %', C.commPctFunded, P.commPctFunded,true,false)}
+    ${varRow('Bank Fee %', C.bankPctFunded, P.bankPctFunded,true,false)}
+    ${varRow('Net Income %', C.netPctFunded, P.netPctFunded,true,true,true)}
   </tbody>`;
 }
 
