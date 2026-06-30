@@ -1158,7 +1158,10 @@ function buildUploadEntityLabel(){
 // ============================================================
 function getAllDeals(ent){
   ent = ent||activeEntity(); if(!ent) return [];
-  return Object.values(ent.dealsByPeriod||{}).flat().filter(d=>(d._srcType==='ls'||d._srcType==='af') && d.merchant && d.fundedDate);
+  return Object.values(ent.dealsByPeriod||{}).flat().filter(d=>
+    (d._srcType==='ls'||d._srcType==='af') && d.merchant && d.fundedDate &&
+    !EXCLUDED_MERCHANTS.has((d.merchant||'').toUpperCase().trim())
+  );
 }
 
 function setPeriodMode(mode){
@@ -2078,6 +2081,8 @@ let MS_STATE = {syndicator:[], iso:[], wl:[], dtype:[], status:[], period:[], en
 // DEAL EXCLUSION SYSTEM
 // ============================================================
 let EXCLUDED_DEAL_IDS = new Set();
+// Merchants permanently excluded from all dashboard calculations
+const EXCLUDED_MERCHANTS = new Set(['ELECT CAPITAL SOLUTIONS LLC']);
 let OUTLIER_BUCKET_STATS = []; // factor-bucket outliers for detail panel
 let SIZE_OUTLIER_BUCKET_STATS = []; // size-bucket outliers for detail panel
 let DEAL_VOL_VIEW = 'factor'; // 'factor' | 'size'
@@ -2200,6 +2205,7 @@ function getRecoveryDeals(){
   if(f.sizeMax) deals=deals.filter(d=>d.amount<=parseFloat(f.sizeMax));
   if(f.merchant){ const q=f.merchant.toLowerCase(); deals=deals.filter(d=>d.merchant.toLowerCase().includes(q)||(d.dealId||'').toLowerCase().includes(q)); }
   if(EXCLUDED_DEAL_IDS.size>0) deals=deals.filter(d=>!EXCLUDED_DEAL_IDS.has(d.id));
+  deals=deals.filter(d=>!EXCLUDED_MERCHANTS.has((d.merchant||'').toUpperCase().trim()));
   return deals;
 }
 
@@ -2231,6 +2237,7 @@ function getFilteredDeals(){
   });
   // Apply deal exclusions
   if(EXCLUDED_DEAL_IDS.size>0) deals = deals.filter(d=>!EXCLUDED_DEAL_IDS.has(d.id));
+  deals = deals.filter(d=>!EXCLUDED_MERCHANTS.has((d.merchant||'').toUpperCase().trim()));
   return deals;
 }
 
