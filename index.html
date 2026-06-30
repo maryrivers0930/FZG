@@ -3878,14 +3878,15 @@ function matchIsoHeight(){
   const card  = document.getElementById('isoLeftCard');
   const wrap  = document.getElementById('isoTblWrap');
   if(!right || !card || !wrap) return;
-  // Collapse ISO card first so it doesn't inflate the grid row height,
-  // then measure the right column's natural height independently.
-  card.style.height = '0px';
-  card.style.overflow = 'hidden';
-  void card.offsetHeight; // force reflow so right column can shrink to natural height
-  const h = right.offsetHeight;
-  if(h < 10){ card.style.height = ''; card.style.overflow = ''; return; }
+  // Sum scrollHeight of each right-column card + the gap between them.
+  // scrollHeight reflects content size regardless of how the grid stretches the element,
+  // so this is immune to circular dependency with the ISO card's own height.
+  const kids = Array.from(right.children);
+  const GAP = 14; // must match gap:14px on the grid container
+  const h = kids.reduce((sum, el) => sum + el.scrollHeight, 0) + GAP * Math.max(0, kids.length - 1);
+  if(h < 10) return;
   card.style.height = h + 'px';
+  card.style.overflow = 'hidden';
   const hdr = card.querySelector('.section-hdr');
   const hdrH = hdr ? hdr.offsetHeight : 44;
   wrap.style.height = (h - hdrH) + 'px';
