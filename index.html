@@ -4628,11 +4628,16 @@ function buildFSWorkbookSections(deals){
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(d);
   });
-  Object.keys(STATE.fsData).forEach(fsKey => {
-    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
-    const k = periodKey(fsKey + '-15', STATE.groupBy);
-    if(!byPeriod[k]) byPeriod[k] = [];
-  });
+  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
+    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
+    Object.keys(STATE.fsData).forEach(fsKey => {
+      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+      if(_ff && fsKey < _ff) return;
+      if(_ft && fsKey > _ft) return;
+      const k = periodKey(fsKey + '-15', STATE.groupBy);
+      if(!byPeriod[k]) byPeriod[k] = [];
+    });
+  }
   const periods = Object.keys(byPeriod).sort();
   const currSel = document.getElementById('varCurrSel');
   const priorSel = document.getElementById('varPriorSel');
@@ -4679,11 +4684,16 @@ function buildFSSummaryTables(deals){
     byPeriod[k].push(d);
   });
   // Include periods that exist in uploaded financial statements even if no deals fall in that period
-  Object.keys(STATE.fsData).forEach(fsKey => {
-    if(!fsKey.match(/^\d{4}-\d{2}$/)) return; // monthly keys only; year keys derived below
-    const k = periodKey(fsKey + '-15', STATE.groupBy);
-    if(!byPeriod[k]) byPeriod[k] = [];
-  });
+  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
+    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
+    Object.keys(STATE.fsData).forEach(fsKey => {
+      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+      if(_ff && fsKey < _ff) return;
+      if(_ft && fsKey > _ft) return;
+      const k = periodKey(fsKey + '-15', STATE.groupBy);
+      if(!byPeriod[k]) byPeriod[k] = [];
+    });
+  }
   const allSortedPeriods = Object.keys(byPeriod).sort();
   // Cap to the 12 most recent periods
   const periods = allSortedPeriods.slice(-12);
@@ -4944,11 +4954,16 @@ function buildFSVarianceTables(deals){
     byPeriod[k].push(d);
   });
   // Include periods that exist in uploaded financial statements even if no deals fall in that period
-  Object.keys(STATE.fsData).forEach(fsKey => {
-    if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
-    const k = periodKey(fsKey + '-15', STATE.groupBy);
-    if(!byPeriod[k]) byPeriod[k] = [];
-  });
+  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
+    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
+    Object.keys(STATE.fsData).forEach(fsKey => {
+      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+      if(_ff && fsKey < _ff) return;
+      if(_ft && fsKey > _ft) return;
+      const k = periodKey(fsKey + '-15', STATE.groupBy);
+      if(!byPeriod[k]) byPeriod[k] = [];
+    });
+  }
   const periods = Object.keys(byPeriod).sort();
   const tbl = document.getElementById('fsVarTable');
   const sub = document.getElementById('fsVarianceSub');
