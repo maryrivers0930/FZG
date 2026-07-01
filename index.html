@@ -4283,52 +4283,86 @@ const FS_PERIODS_ORDERED = [];
 // Default QB account-name → internal field mapping (fuzzy-matched, case-insensitive)
 // P&L accounts
 const QB_PL_ACCOUNT_MAP = {
-  // Origination income
+  // ── Origination / funding income ──────────────────────────────────────────
   'origination income': 'orig_income',
   'origination fee': 'orig_income',
   'origination fees': 'orig_income',
   'origination fee income': 'orig_income',
-  // Collection fee income
+  'factor income': 'orig_income',
+  'advance income': 'orig_income',
+  'merchant advance income': 'orig_income',
+  'funding income': 'orig_income',
+  'portfolio income': 'orig_income',
+  'income from advances': 'orig_income',
+  // ── Collection fee income ─────────────────────────────────────────────────
   'collection fee income': 'coll_fee_income',
   'collection fee': 'coll_fee_income',
   'collection fees': 'coll_fee_income',
-  // Monthly fee income
+  'collections income': 'coll_fee_income',
+  // ── Monthly / monitoring fee income ───────────────────────────────────────
   'monthly fee income': 'monthly_fee_income',
   'monthly fee': 'monthly_fee_income',
   'monthly fees': 'monthly_fee_income',
   'account monitoring fee': 'monthly_fee_income',
   'account monitoring': 'monthly_fee_income',
-  // Commission fee income
+  'monitoring fee': 'monthly_fee_income',
+  'monitoring fees': 'monthly_fee_income',
+  // ── Commission fee income (revenue side) ──────────────────────────────────
   'commission fee income': 'comm_fee_income',
   'commission income': 'comm_fee_income',
-  // Default fee income
+  // ── Default fee income ────────────────────────────────────────────────────
   'default fee income': 'default_fee_income',
   'default fee': 'default_fee_income',
+  'default fees': 'default_fee_income',
+  'late fee income': 'default_fee_income',
+  // ── Management fee income ─────────────────────────────────────────────────
   'management fee income': 'mgmt_fee_income',
   'management fees': 'mgmt_fee_income',
+  'management fee': 'mgmt_fee_income',
   'mgmt fee income': 'mgmt_fee_income',
+  'mgmt fees': 'mgmt_fee_income',
+  'portfolio management fees': 'mgmt_fee_income',
+  // ── Total income ──────────────────────────────────────────────────────────
   'total income': 'total_income',
   'total revenue': 'total_income',
+  'revenue': 'total_income',
+  'gross revenue': 'total_income',
+  // ── COGS: commission expense (ISO/broker commissions paid) ────────────────
   'commission expense': 'comm_exp',
   'commissions': 'comm_exp',
   'commission expenses': 'comm_exp',
+  'commission paid': 'comm_exp',
+  'iso commissions': 'comm_exp',
+  'iso fees': 'comm_exp',
+  'broker commissions': 'comm_exp',
+  'broker fees': 'comm_exp',
+  'syndication fees': 'comm_exp',
+  'referral fees': 'comm_exp',
+  // ── COGS: other ───────────────────────────────────────────────────────────
   'other cogs': 'other_cogs',
   'cost of goods sold': 'total_cogs',
   'total cost of goods sold': 'total_cogs',
   'total cogs': 'total_cogs',
   'gross profit': 'gross_profit',
-  // Bank / merchant fees
+  // ── Bank / merchant / processing fees ─────────────────────────────────────
   'bank fees': 'bank_fees',
   'bank charges': 'bank_fees',
   'bank service charges': 'bank_fees',
   'bank service fee': 'bank_fees',
+  'bank fees and service charges': 'bank_fees',
   'merchant bank fees': 'bank_fees',
   'merchant fees': 'bank_fees',
   'merchant processing': 'bank_fees',
+  'merchant service fees': 'bank_fees',
   'payment processing': 'bank_fees',
+  'processing fees': 'bank_fees',
+  'transaction fees': 'bank_fees',
   'wire fees': 'bank_fees',
+  'wire transfer fees': 'bank_fees',
   'ach fees': 'bank_fees',
-  // Office / G&A
+  'ach processing': 'bank_fees',
+  'service charges': 'bank_fees',
+  // ── Office / G&A ──────────────────────────────────────────────────────────
   'office expenses': 'office_exp',
   'office expense': 'office_exp',
   'general and administrative': 'office_exp',
@@ -4336,7 +4370,8 @@ const QB_PL_ACCOUNT_MAP = {
   'administrative expenses': 'office_exp',
   'office supplies': 'office_exp',
   'miscellaneous': 'office_exp',
-  // Software / subscriptions
+  'office and administrative': 'office_exp',
+  // ── Software / subscriptions ──────────────────────────────────────────────
   'software expenses': 'software_exp',
   'software expense': 'software_exp',
   'software subscriptions': 'software_exp',
@@ -4344,16 +4379,25 @@ const QB_PL_ACCOUNT_MAP = {
   'subscriptions': 'software_exp',
   'computer and software': 'software_exp',
   'technology': 'software_exp',
-  // Payroll
+  'computer expense': 'software_exp',
+  'it expenses': 'software_exp',
+  // ── Payroll ───────────────────────────────────────────────────────────────
   'payroll': 'payroll_total',
   'salaries': 'payroll_total',
   'salaries and wages': 'payroll_total',
   'wages': 'payroll_total',
   'payroll expenses': 'payroll_total',
+  'payroll and related': 'payroll_total',
+  'payroll and related expenses': 'payroll_total',
   'payroll tax': 'payroll_total',
   'payroll taxes': 'payroll_total',
   'employee benefits': 'payroll_total',
-  // Professional fees
+  'wages and salaries': 'payroll_total',
+  'officer salary': 'payroll_total',
+  'officer compensation': 'payroll_total',
+  'owner salary': 'payroll_total',
+  'guaranteed payments': 'payroll_total',
+  // ── Professional fees ─────────────────────────────────────────────────────
   'professional fees': 'prof_fees',
   'professional services': 'prof_fees',
   'legal and professional': 'prof_fees',
@@ -4361,52 +4405,76 @@ const QB_PL_ACCOUNT_MAP = {
   'accounting fees': 'prof_fees',
   'consulting fees': 'prof_fees',
   'legal and accounting': 'prof_fees',
-  // Sales & Marketing
+  'audit fees': 'prof_fees',
+  'outside services': 'prof_fees',
+  // ── Sales & Marketing ─────────────────────────────────────────────────────
   'sales and marketing': 'sales_mktg',
   'marketing': 'sales_mktg',
   'advertising': 'sales_mktg',
   'advertising and marketing': 'sales_mktg',
   'business development': 'sales_mktg',
-  // Insurance
+  'promotions': 'sales_mktg',
+  'marketing expenses': 'sales_mktg',
+  // ── Insurance ─────────────────────────────────────────────────────────────
   'insurance': 'insurance',
   'insurance expense': 'insurance',
-  // Travel
+  'business insurance': 'insurance',
+  'liability insurance': 'insurance',
+  // ── Travel ────────────────────────────────────────────────────────────────
   'travel': 'travel',
   'travel and entertainment': 'travel',
   'meals and entertainment': 'travel',
   'travel expense': 'travel',
-  // Utilities
+  'transportation': 'travel',
+  'automobile': 'travel',
+  'vehicle expenses': 'travel',
+  'mileage': 'travel',
+  'meals': 'travel',
+  // ── Utilities ─────────────────────────────────────────────────────────────
   'utilities': 'utilities',
   'telephone': 'utilities',
   'internet': 'utilities',
   'utilities and telephone': 'utilities',
-  // Rent
+  'phone and internet': 'utilities',
+  'cell phone': 'utilities',
+  // ── Rent ──────────────────────────────────────────────────────────────────
   'rent': 'rent',
   'rent expense': 'rent',
   'office rent': 'rent',
   'lease': 'rent',
-  // Totals
+  'rent and lease': 'rent',
+  // ── Totals / summaries ────────────────────────────────────────────────────
   'total operating expenses': 'total_opex',
   'total expenses': 'total_opex',
   'operating expenses': 'total_opex',
+  'total other expenses': 'total_opex',
   'ebitda': 'ebitda',
-  // Other
+  // ── Below-the-line items ──────────────────────────────────────────────────
   'other income': 'other_income',
+  'miscellaneous income': 'other_income',
   'other expense': 'other_exp',
   'other expenses': 'other_exp',
   'research and development': 'rd_exp',
   'r and d': 'rd_exp',
   'interest expense': 'interest_exp',
   'interest': 'interest_exp',
+  'interest and bank charges': 'interest_exp',
   'depreciation': 'depreciation',
   'depreciation and amortization': 'depreciation',
+  'depreciation expense': 'depreciation',
   'amortization': 'depreciation',
+  'amortization expense': 'depreciation',
   'taxes': 'taxes',
   'income taxes': 'taxes',
+  'income tax': 'taxes',
   'state taxes': 'taxes',
+  'state income tax': 'taxes',
+  'federal income tax': 'taxes',
+  'tax expense': 'taxes',
   'net income': 'net_income',
   'net earnings': 'net_income',
   'net profit': 'net_income',
+  'net loss': 'net_income',
 };
 
 // Balance sheet accounts
@@ -4771,6 +4839,23 @@ function buildFSSummaryTables(deals){
   const allDm  = computeFSMetrics(periodDeals);
   const allWbd = getFSWbAllPeriods(periods);
 
+  // ── Growth: period-over-period change in total_income ────────────────────────
+  // Computed here so wRow('Growth') can read wbd[p].growth without needing the
+  // prior period key at render time. Creates shallow copies — STATE.fsData is untouched.
+  periods.forEach((p, i) => {
+    if(i === 0) return;
+    const curr  = (wbd[p]||{}).total_income;
+    const prior = (wbd[periods[i-1]]||{}).total_income;
+    if(curr != null && prior != null && prior !== 0)
+      wbd[p] = Object.assign({}, wbd[p], {growth: curr/prior - 1});
+  });
+  // Total column growth: first displayed period → last displayed period
+  if(showTotal){
+    const first = (wbd[periods[0]]||{}).total_income;
+    const last  = (wbd[periods[periods.length-1]]||{}).total_income;
+    allWbd.growth = (first != null && last != null && first !== 0) ? last/first - 1 : null;
+  }
+
   const N = periods.length, showTotal = N > 1;
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
 
@@ -4807,14 +4892,19 @@ function buildFSSummaryTables(deals){
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
-  // Data row sourced from deal data (respects filters)
+  // Data row sourced from deal data (respects filters).
+  // Shows '—' for periods that have FS data but no deals — a zero from an empty
+  // period is not the same as a zero computed from actual deal activity.
   function dRow(label, key, isPct, bold){
     const lStyle = bold
       ? 'font-weight:700;padding-left:8px'
       : 'padding-left:20px;color:var(--muted)';
     const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
-    const cells = periods.map(p => cell(dm[p][key], isPct, bold)).join('');
-    const tot   = showTotal ? cell(allDm[key], isPct, bold) : '';
+    const cells = periods.map(p => {
+      const val = (byPeriod[p]||[]).length ? dm[p][key] : null;
+      return cell(val, isPct, bold);
+    }).join('');
+    const tot = showTotal ? cell(periodDeals.length ? allDm[key] : null, isPct, bold) : '';
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
@@ -4894,42 +4984,42 @@ function buildFSSummaryTables(deals){
 
     ${sHdr('Income Statement for Period Ended')}
     ${sHdr('Income', true)}
-    ${wRow('Origination Income',                 'orig_income',      false, false)}
-    ${wRow('Collection Fee Income',              'coll_fee_income',  false, false)}
-    ${wRow('Monthly Fee Income',                 'monthly_fee_income',false,false)}
-    ${wRow('Commission Fee Income',              'comm_fee_income',  false, false)}
-    ${wRow('Default Fee Income',                 'default_fee_income',false,false)}
-    ${dRow('Management Fee Income',              'mgmtFee',          false, false)}
-    ${wRow('Total Income',                       'total_income',     false, true)}
+    ${wRow('Origination Income',                 'orig_income',                     false, false)}
+    ${wRow('Collection Fee Income',              'coll_fee_income',                 false, false)}
+    ${wRow('Monthly Fee Income',                 'monthly_fee_income',              false, false)}
+    ${wRow('Commission Fee Income',              'comm_fee_income',                 false, false)}
+    ${wRow('Default Fee Income',                 'default_fee_income',              false, false)}
+    ${fRow('Management Fee Income',              'mgmt_fee_income',  'mgmtFee',     false, false)}
+    ${fRow('Total Income',                       'total_income',     'mgmtFee',     false, true)}
     ${sHdr('Cost of Goods Sold', true)}
-    ${dRow('Commission Expenses',                'commission',       false, false)}
-    ${wRow('Other Cost of Goods Sold',           'other_cogs',       false, false)}
-    ${fRow('Total Cost of Goods Sold',           'total_cogs',       'totalCogs',    false, true)}
-    ${fRow('Gross Profit',                       'gross_profit',     'grossProfit',  false, true)}
-    ${fRow('Gross Margin %',                     'gross_margin_pct', 'grossMargin',  true,  false)}
+    ${fRow('Commission Expenses',                'comm_exp',         'commission',  false, false)}
+    ${wRow('Other Cost of Goods Sold',           'other_cogs',                      false, false)}
+    ${fRow('Total Cost of Goods Sold',           'total_cogs',       'totalCogs',   false, true)}
+    ${fRow('Gross Profit',                       'gross_profit',     'grossProfit', false, true)}
+    ${fRow('Gross Margin %',                     'gross_margin_pct', 'grossMargin', true,  false)}
     ${sHdr('Operating Expenses', true)}
-    ${dRow('Bank Fees & Service Charges',        'bankFee',          false, false)}
-    ${wRow('Office Expenses',                    'office_exp',       false, false)}
-    ${wRow('Software Expense',                   'software_exp',     false, false)}
-    ${wRow('Payroll and Related Expenses',       'payroll_total',    false, false)}
-    ${wRow('Professional Fees',                  'prof_fees',        false, false)}
-    ${wRow('Sales & Marketing Expenses',         'sales_mktg',       false, false)}
-    ${wRow('Insurance',                          'insurance',        false, false)}
-    ${wRow('Transportation and Travel',          'travel',           false, false)}
-    ${wRow('Utilities',                          'utilities',        false, false)}
-    ${wRow('Rent Expenses',                      'rent',             false, false)}
-    ${wRow('Total for Expenses',                 'total_opex',       false, true)}
-    ${wRow('Expenses % of Revenue',              'exp_pct_rev',      true,  false)}
-    ${fRow('EBITDA',                             'ebitda',           'ebitda',       false, true)}
-    ${wRow('Other Income',                       'other_income',     false, false)}
-    ${wRow('Other Expenses',                     'other_exp',        false, false)}
-    ${wRow('Research and Development',           'rd_exp',           false, false)}
-    ${wRow('Interest Expense',                   'interest_exp',     false, false)}
-    ${wRow('Depreciation',                       'depreciation',     false, false)}
-    ${wRow('Taxes',                              'taxes',            false, false)}
-    ${fRow('Net Income',                         'net_income',       'netIncome',    false, true)}
-    ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',     true,  false)}
-    ${wRow('Growth',                             'growth',           true,  false)}
+    ${fRow('Bank Fees & Service Charges',        'bank_fees',        'bankFee',     false, false)}
+    ${wRow('Office Expenses',                    'office_exp',                      false, false)}
+    ${wRow('Software Expense',                   'software_exp',                    false, false)}
+    ${wRow('Payroll and Related Expenses',       'payroll_total',                   false, false)}
+    ${wRow('Professional Fees',                  'prof_fees',                       false, false)}
+    ${wRow('Sales & Marketing Expenses',         'sales_mktg',                      false, false)}
+    ${wRow('Insurance',                          'insurance',                       false, false)}
+    ${wRow('Transportation and Travel',          'travel',                          false, false)}
+    ${wRow('Utilities',                          'utilities',                       false, false)}
+    ${wRow('Rent Expenses',                      'rent',                            false, false)}
+    ${fRow('Total for Expenses',                 'total_opex',       'totalOpex',   false, true)}
+    ${fRow('Expenses % of Revenue',              'exp_pct_rev',      'bankPctFunded',true, false)}
+    ${fRow('EBITDA',                             'ebitda',           'ebitda',      false, true)}
+    ${wRow('Other Income',                       'other_income',                    false, false)}
+    ${wRow('Other Expenses',                     'other_exp',                       false, false)}
+    ${wRow('Research and Development',           'rd_exp',                          false, false)}
+    ${wRow('Interest Expense',                   'interest_exp',                    false, false)}
+    ${wRow('Depreciation',                       'depreciation',                    false, false)}
+    ${wRow('Taxes',                              'taxes',                           false, false)}
+    ${fRow('Net Income',                         'net_income',       'netIncome',   false, true)}
+    ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',    true,  false)}
+    ${wRow('Growth',                             'growth',                          true,  false)}
   </tbody>`;
 }
 
