@@ -5685,8 +5685,9 @@ function buildRecoveryTab(){
 
   const last   = groupedRows[groupedRows.length-1];
   const prev   = groupedRows.length>1 ? groupedRows[groupedRows.length-2] : null;
-  const delta  = (last && prev) ? last.rate - prev.rate : 0;
-  const deltaPct = (last && prev && prev.rate) ? delta/prev.rate : 0;
+  const hasDelta = !!(last && prev);
+  const delta    = hasDelta ? last.rate - prev.rate : null;
+  const deltaPct = (hasDelta && prev.rate) ? delta/prev.rate : null;
   const periodGrainLabel = STATE.groupBy==='year' ? 'YoY' : STATE.groupBy==='quarter' ? 'QoQ' : 'MoM';
 
   const kpiCards = [];
@@ -5697,33 +5698,60 @@ function buildRecoveryTab(){
   if(last){
     kpiCards.push({label:'Latest Period Rate', val:(last.rate*100).toFixed(2)+'%',
                    sub:last.label, c:'var(--blue)'});
-    kpiCards.push({label:periodGrainLabel+' Change (pts)',
-                   val:(delta>=0?'+':'')+((delta)*100).toFixed(2)+'%',
-                   sub:'vs prior period', c:delta>=0?'var(--green)':'var(--red)'});
-    kpiCards.push({label:periodGrainLabel+' % Change',
-                   val:(deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)),
-                   sub:'rate-over-rate', c:deltaPct>=0?'var(--green)':'var(--red)'});
+    kpiCards.push({
+      label: periodGrainLabel+' Change (pts)',
+      val:   delta===null ? '—' : (delta>=0?'+':'')+((delta)*100).toFixed(2)+'%',
+      sub:   hasDelta ? 'vs '+prev.label : 'only one period',
+      c:     delta===null?'var(--muted)':delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)'
+    });
+    kpiCards.push({
+      label: periodGrainLabel+' % Change',
+      val:   deltaPct===null ? '—' : (deltaPct>=0?'+':'')+fmtPct(Math.abs(deltaPct)),
+      sub:   'rate-over-rate',
+      c:     deltaPct===null?'var(--muted)':deltaPct>0?'var(--green)':deltaPct<0?'var(--red)':'var(--muted)'
+    });
   }
-  if(deals.length){
-    kpiCards.push({label:'Periods Loaded', val:groupedRows.length,
-                   sub:deals.length+' deals', c:'var(--muted)'});
-  }
+  kpiCards.push({
+    label:'Periods Loaded', val:groupedRows.length,
+    sub:  deals.length ? deals.length+' deals' : 'manual snapshots only',
+    c:'var(--muted)'
+  });
   kpiEl.innerHTML = kpiCards.map(k=>
     `<div class="rec-card"><div class="rec-label">${k.label}</div><div class="rec-val" style="color:${k.c}">${k.val}</div><div class="rec-sub">${k.sub}</div></div>`
   ).join('');
 
   // ── Charts — only render when tab is visible ────────────────────────────────
+  // Compute period-over-period change series for the chart (ascending order)
+  const changeData = groupedRows.map((g,i) => {
+    if(i===0) return null;
+    const p = groupedRows[i-1];
+    return p.rate ? +((g.rate - p.rate)*100).toFixed(3) : null;
+  });
+
   if(tabVisible){
     if(groupedRows.length){
       makeChart('covFeesChart','line',{
         labels: groupedRows.map(g=>g.label),
-        datasets:[{
-          label:'Recovery Rate %',
-          data: groupedRows.map(g=>+(g.rate*100).toFixed(2)),
-          borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)',
-          fill:true, tension:.3, pointRadius:4
-        }]
-      },{yFmt:v=>v.toFixed(1)+'%'});
+        datasets:[
+          {
+            label:'Recovery Rate %',
+            data: groupedRows.map(g=>+(g.rate*100).toFixed(2)),
+            borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.15)',
+            fill:true, tension:.3, pointRadius:4
+          },
+          {
+            label:periodGrainLabel+' Change (pts)',
+            data: changeData,
+            borderColor:'#f78166', backgroundColor:'rgba(0,0,0,0)',
+            fill:false, tension:.3, pointRadius:4, borderDash:[4,3],
+            yAxisID:'y2', spanGaps:false
+          }
+        ]
+      },{
+        yFmt:v=>v.toFixed(1)+'%',
+        y2:true,
+        y2Fmt:v=>(v>=0?'+':'')+v.toFixed(2)+'%'
+      });
     } else {
       destroyChart('covFeesChart');
     }
