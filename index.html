@@ -4839,6 +4839,8 @@ function buildFSSummaryTables(deals){
   const allDm  = computeFSMetrics(periodDeals);
   const allWbd = getFSWbAllPeriods(periods);
 
+  const N = periods.length, showTotal = N > 1;
+
   // ── Growth: period-over-period change in total_income ────────────────────────
   // Computed here so wRow('Growth') can read wbd[p].growth without needing the
   // prior period key at render time. Creates shallow copies — STATE.fsData is untouched.
@@ -4855,8 +4857,6 @@ function buildFSSummaryTables(deals){
     const last  = (wbd[periods[periods.length-1]]||{}).total_income;
     allWbd.growth = (first != null && last != null && first !== 0) ? last/first - 1 : null;
   }
-
-  const N = periods.length, showTotal = N > 1;
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
 
   // ── Formatting helpers ──────────────────────────────────────────
