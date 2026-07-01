@@ -560,34 +560,15 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
     </div>
 
-    <!-- Syndicator full breakdown with mgmt fees -->
-    <div class="section">
-      <div class="section-hdr">
-        <span class="section-title">Syndicator Breakdown — Full Portfolio</span>
-        <span class="section-sub" id="coverSyndCount">39 syndicators</span>
-      </div>
-      <div class="tbl-wrap"><table class="data-tbl" id="coverSyndTable"></table></div>
-    </div>
-
-    <!-- ISO/Brokers + simple volume tables -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;align-items:start">
-      <div class="section" id="isoLeftCard" style="margin:0;display:flex;flex-direction:column;overflow:hidden">
+    <!-- ISO/Brokers -->
+    <div style="margin-bottom:16px">
+      <div class="section" id="isoLeftCard" style="display:flex;flex-direction:column;overflow:hidden">
         <div class="section-hdr" style="flex-shrink:0">
           <span class="section-title">Top ISO / Brokers</span>
           <input id="isoSearch" type="text" placeholder="Search…" oninput="filterIsoTable(this.value)"
             style="margin-left:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:3px 8px;width:140px;outline:none"/>
         </div>
         <div class="tbl-wrap" id="isoTblWrap" style="overflow-y:auto"><table class="data-tbl" id="coverIsoTable"></table></div>
-      </div>
-      <div id="isoRightCol" style="display:flex;flex-direction:column;gap:14px">
-        <div class="section" style="margin:0">
-          <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Funding Amount</span></div>
-          <div id="coverFundingAmtBars"></div>
-        </div>
-        <div class="section" style="margin:0">
-          <div class="section-hdr"><span class="section-title" style="font-size:12px">Deal Funded Volume by Factor Rate Bucket</span></div>
-          <div id="coverFactorBars"></div>
-        </div>
       </div>
     </div>
 
@@ -608,15 +589,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
       <div id="coverRenewalKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px"></div>
       <div class="tbl-wrap"><table class="data-tbl" id="coverRenewalTable"></table></div>
-    </div>
-
-    <!-- Deal-level table -->
-    <div class="section">
-      <div class="section-hdr">
-        <span class="section-title">Deal Detail</span>
-        <span class="section-sub" id="coverDealCount">4897 deals (showing up to 200)</span>
-      </div>
-      <div class="tbl-wrap"><table class="data-tbl" id="coverDealTable"></table></div>
     </div>
 
   </div>
@@ -671,9 +643,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 
   <!-- ===== PORTFOLIO (COMPANY METRICS) TAB ===== -->
   <div id="tab-portfolio" class="tab-content">
-    <!-- Company-level KPIs -->
-    <div class="kpi-grid" id="portKpiGrid"><div class="kpi-card" style="border-top:2px solid var(--purple)"><div class="kpi-label">Total Funded</div><div class="kpi-val" style="color:var(--purple)">$132.07M</div><div class="kpi-sub">4897 deals</div></div><div class="kpi-card" style="border-top:2px solid var(--blue)"><div class="kpi-label">Total RTR</div><div class="kpi-val" style="color:var(--blue)">$195.31M</div><div class="kpi-sub">Avg factor 1.4896</div></div><div class="kpi-card" style="border-top:2px solid var(--green)"><div class="kpi-label">Collected</div><div class="kpi-val" style="color:var(--green)">$123.23M</div><div class="kpi-sub">63.1% of RTR</div></div><div class="kpi-card" style="border-top:2px solid var(--yellow)"><div class="kpi-label">Remaining RTR</div><div class="kpi-val" style="color:var(--yellow)">$62.80M</div><div class="kpi-sub">Outstanding</div></div><div class="kpi-card" style="border-top:2px solid var(--orange)"><div class="kpi-label">Mgmt Fees</div><div class="kpi-val" style="color:var(--orange)">$18.1K</div><div class="kpi-sub">0.0% of funded</div></div><div class="kpi-card" style="border-top:2px solid var(--blue)"><div class="kpi-label">Net Payout</div><div class="kpi-val" style="color:var(--blue)">$63.14M</div><div class="kpi-sub">After fees</div></div><div class="kpi-card" style="border-top:2px solid var(--yellow)"><div class="kpi-label">Factor Range</div><div class="kpi-val" style="color:var(--yellow)">1.32–1.70</div><div class="kpi-sub">Avg: 1.4896</div></div><div class="kpi-card" style="border-top:2px solid var(--red)"><div class="kpi-label">Default Exp.</div><div class="kpi-val" style="color:var(--red)">$206.0K</div><div class="kpi-sub">7 deals · 0.2%</div></div></div>
-
     <div class="chart-row">
       <div class="chart-box" style="grid-column:1/-1">
         <div class="chart-title">Funded, Collections &amp; Remaining RTR by Period</div>
@@ -688,17 +657,6 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       <div class="chart-box">
         <div class="chart-title">Average Factor Rate by Period</div>
         <div class="chart-wrap"><canvas id="portAvgFactorChart" style="box-sizing: border-box; display: block; height: 0px; width: 0px;" width="0" height="0"></canvas></div>
-      </div>
-    </div>
-
-    <div class="chart-row">
-      <div class="chart-box">
-        <div class="chart-title">Portfolio by White Label — % Funded</div>
-        <div class="chart-wrap"><canvas id="portWLChart"></canvas></div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title">Deal Count by Status</div>
-        <div class="chart-wrap"><canvas id="portStatusChart"></canvas></div>
       </div>
     </div>
 
@@ -3745,21 +3703,6 @@ function buildCover(deals){
     ]
   },{yFmt:v=>fmt$(v),tooltipFn:ctx=>ctx.dataset.label+': '+fmt$(ctx.raw),extra:{scales:{x:{stacked:true},y:{stacked:true}}}});
 
-  // Syndicator breakdown — prefer Syndication Report (sl) data, fallback to white label aggregation
-  const slDeals = getSyndReportDeals();
-  if(slDeals.length>0){
-    document.getElementById('coverSyndCount').textContent=[...new Set(slDeals.map(d=>d.syndicator))].length+' syndicators (from Syndication Report)';
-    const syndRows = aggSyndReportBySyndicator(slDeals);
-    renderSyndReportTable(syndRows,'coverSyndTable');
-  } else {
-    document.getElementById('coverSyndCount').textContent=[...new Set(deals.map(d=>d.whiteLabel))].length+' white labels';
-    // Fall back to white label table
-    const wlData={};
-    deals.forEach(d=>{ if(!wlData[d.whiteLabel]) wlData[d.whiteLabel]={n:d.whiteLabel,deals:0,funded:0,collected:0,rtr:0,remaining:0}; const w=wlData[d.whiteLabel]; w.deals++;w.funded+=d.amount;w.collected+=d.collected;w.rtr+=d.rtr;w.remaining+=d.remaining; });
-    const wlRows=Object.values(wlData).sort((a,b)=>b.funded-a.funded);
-    document.getElementById('coverSyndTable').innerHTML=`<thead><tr><th>White Label</th><th>Deals</th><th>Funded</th><th>% Port</th><th>Collected</th><th>Ending RTR</th><th>Recovery</th></tr></thead><tbody>${wlRows.map(r=>`<tr><td><b>${r.n}</b></td><td>${r.deals}</td><td>${fmtFull$(r.funded)}</td><td>${fmtPct(totalFunded?r.funded/totalFunded:0)}</td><td>${fmtFull$(r.collected)}</td><td>${fmtFull$(r.remaining)}</td><td class="${r.rtr?(r.collected/r.rtr>=0.9?'up':'down'):'neu'}">${r.rtr?fmtPct(r.collected/r.rtr):'—'}</td></tr>`).join('')}</tbody>`;
-  }
-
   // ISO table (compact) — store rows globally for search filtering
   const isoData={};
   deals.forEach(d=>{
@@ -3819,9 +3762,6 @@ function buildCover(deals){
     rnRows.map(r=>'<tr><td style="text-align:left;font-weight:600">'+periodLabel(r.p,STATE.groupBy)+'</td><td>'+r.deals+'</td><td>'+fmtFull$(r.funded)+'</td><td>'+r.renewedCnt+'</td><td>'+fmtPct(r.deals?r.renewedCnt/r.deals:0)+'</td><td>'+fmtFull$(r.pureCollected)+'</td><td>'+fmtFull$(r.renewedRTR)+'</td><td>'+fmtFull$(r.renewedExcess)+'</td></tr>').join('')
     +'<tr class="total-row"><td>TOTAL</td><td>'+deals.length+'</td><td>'+fmtFull$(totalFunded)+'</td><td>'+renewedDeals.length+'</td><td>'+fmtPct(deals.length?renewedDeals.length/deals.length:0)+'</td><td>'+fmtFull$(pureCollected)+'</td><td>'+fmtFull$(renewedRTR)+'</td><td>'+fmtFull$(renewedExcess)+'</td></tr></tbody>';
 
-  // Deal table
-  document.getElementById('coverDealCount').textContent=deals.length+' deals (showing up to 200)';
-  renderDealTable(deals,'coverDealTable',200);
 }
 
 function buildCoverMoM(deals, periods){
@@ -4035,16 +3975,6 @@ function buildPortfolio(deals){
   const minFactor=withFactor.length?Math.min(...withFactor.map(d=>d.factor)):0;
   const maxFactor=withFactor.length?Math.max(...withFactor.map(d=>d.factor)):0;
 
-  document.getElementById('portKpiGrid').innerHTML=[
-    {label:'Total Funded',val:fmt$(totalFunded),sub:deals.length+' deals',c:'var(--purple)'},
-    {label:'Total RTR',val:fmt$(totalRTR),sub:'Avg factor '+avgFactor.toFixed(4),c:'var(--blue)'},
-    {label:'Collected',val:fmt$(totalColl),sub:totalRTR?fmtPct(totalColl/totalRTR)+' of RTR':'—',c:'var(--green)'},
-    {label:'Remaining RTR',val:fmt$(totalRem),sub:'Outstanding',c:'var(--yellow)'},
-    {label:'Factor Range',val:withFactor.length?minFactor.toFixed(2)+'–'+maxFactor.toFixed(2):'—',sub:'Avg: '+avgFactor.toFixed(4),c:'var(--yellow)'},
-    {label:'Default Exp.',val:fmt$(defAmt),sub:defDeals.length+' deals · '+fmtPct(totalFunded?defAmt/totalFunded:0),c:'var(--red)'},
-    {label:'Avg Deal Size',val:fmt$(deals.length?totalFunded/deals.length:0),sub:deals.length+' deals total',c:'var(--muted)'},
-  ].map(k=>`<div class="kpi-card" style="border-top:2px solid ${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val" style="color:${k.c}">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
-
   // Trend chart
   const byP={};
   deals.forEach(d=>{
@@ -4085,23 +4015,6 @@ function buildPortfolio(deals){
     datasets:[{label:'Avg Factor Rate',data:fpKeys.map(p=>factorByP[p].sum/factorByP[p].cnt),borderColor:'#e3b341',backgroundColor:'rgba(227,179,65,.15)',fill:true,tension:.3,pointRadius:4}]
   },{yFmt:v=>v.toFixed(4)});
 
-  // White label donut
-  const wlChartData={};
-  deals.forEach(d=>{ wlChartData[d.whiteLabel]=(wlChartData[d.whiteLabel]||0)+d.amount; });
-  const wlEntries=Object.entries(wlChartData).sort((a,b)=>b[1]-a[1]);
-  makeChart('portWLChart','doughnut',{
-    labels:wlEntries.map(([k])=>k),
-    datasets:[{data:wlEntries.map(([,v])=>v),backgroundColor:COLORS,borderWidth:1,borderColor:'#0d1117'}]
-  },{legendPos:'right',tooltipFn:ctx=>'$'+(ctx.raw/1e6).toFixed(2)+'M'});
-  // Status chart
-  const stData={};
-  deals.forEach(d=>{ stData[d.status]=(stData[d.status]||0)+1; });
-  const stEntries=Object.entries(stData).sort((a,b)=>b[1]-a[1]);
-  const stColors=stEntries.map(([s])=>isPerforming(s)?'rgba(63,185,80,.85)':isDefault(s)?'rgba(248,81,73,.85)':isSlowPay(s)?'rgba(240,136,62,.85)':'rgba(139,148,158,.6)');
-  makeChart('portStatusChart','doughnut',{
-    labels:stEntries.map(([k])=>k),
-    datasets:[{data:stEntries.map(([,v])=>v),backgroundColor:stColors,borderWidth:1,borderColor:'#0d1117'}]
-  },{legendPos:'right',tooltipFn:ctx=>ctx.raw+' deals ('+fmtPct(ctx.raw/deals.length)+')'});
 
   // White Label panel
   const wlData={};
