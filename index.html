@@ -6237,13 +6237,13 @@ function buildHistPerfTable(deals){
         ${lrow('Avg Term (days)',r=>r.termCount?r.termSum/r.termCount:0,v=>v?Math.round(v)+'d':'—')}
         ${lrow('First Time Fundings',r=>r.ftf,fN)}
         ${lrow('FTF %',r=>r.units?r.ftf/r.units:0,fP)}
+        ${lrow('Upfront TPC',r=>r.funded+r.commission-r.merchantBankFee,fC)}
         ${lsec('FINANCIAL PERFORMANCE')}
         ${lrow('Total RTR',r=>r.rtr,fC)}
         ${lrow('Commission / Upfront',r=>r.commission,fC,'var(--orange)')}
         ${lrow('Commissions % of Funded',r=>r.funded?r.commission/r.funded:0,fP)}
         ${lrow('Merchant Bank Fee',r=>r.merchantBankFee,fC)}
         ${lrow('Bank Fees % of Funded',r=>r.funded?r.merchantBankFee/r.funded:0,fP)}
-        ${lrow('Upfront TPC',r=>r.funded+r.commission-r.merchantBankFee,fC)}
         ${lrow('Collected',r=>r.collected,fC,'var(--green)')}
         ${lrow('Management Fees',r=>r.mgmtFees,fC)}
         ${lrow('Discounts',r=>r.discounts,fC)}
