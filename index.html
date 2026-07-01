@@ -1937,8 +1937,8 @@ function calcRecRate(collected, funded, commission, bankFee){
 }
 
 const PERFORMING_STATUSES = ['active','performing','closed','closed, incomplete','closed incomplete','legal - collections pif'];
-const SLOW_PAY_STATUSES = ["collection's - paying",'legal - paying','modified payments'];
-const DEFAULT_STATUSES = ['bouncing',"collection's",'dead rtr','legal','in-house legal','bankruptcy','syndication default','pending'];
+const SLOW_PAY_STATUSES = ["collection's - paying",'legal - paying','modified payments','modification'];
+const DEFAULT_STATUSES = ['bouncing',"collection's",'collections','dead rtr','legal','in-house legal','bankruptcy','syndication default','pending'];
 
 function statusCategory(s){
   const sl = (s||'').toLowerCase().trim();
@@ -2053,6 +2053,24 @@ function parseLendSaas(rows, ent, period, srcType){
       colExact(r,'upfront fee commission') ||
       colFind(r,'upfrontcommission','upfront commission') ||
       colFind(r,'upfrontfee','upfront fee') || 0
+    );
+
+    // Bank fee: not always present in Closing Reports; try common column names
+    const merchantBankFee = parseNum(
+      colExact(r,'bank fee') ||
+      colExact(r,'merchant bank fee') ||
+      colExact(r,'mark up') ||
+      colFind(r,'bankfee','merchantbankfee','markup','markupfee') ||
+      colFind(r,'processingfee','processing fee','wirefee','wire fee') || 0
+    );
+
+    // Collection fees charged at deal level (monitoring, collection agency, etc.)
+    const collectionFees = parseNum(
+      colExact(r,'collection fee') ||
+      colExact(r,'collection fees') ||
+      colExact(r,'monitoring fee') ||
+      colFind(r,'collectionfee','collectionfees') ||
+      colFind(r,'monitoringfee','monitoring fee') || 0
     );
 
     // Write-off: "Write Off Balance" (Closing)
@@ -2197,7 +2215,8 @@ function parseLendSaas(rows, ent, period, srcType){
       netPayout,
       origination,
       commission,
-      merchantBankFee: 0,  // Closing Report has no bank fee column; defaults to 0
+      merchantBankFee,
+      collectionFees,
       nonCashColl: 0,       // Closing Report 'Gross Collections' already includes all collections
       engagement,
       writeOff,
@@ -2284,6 +2303,7 @@ function parseAdvanceFunded(rows, ent, period){
     const status    = mapStatus(r['Status'], r['AM Status']);
     // Additional fields from Advanced Funded Report
     const writeOff      = pNum(r['Write-Off Balance']);
+    const collectionFees= pNum(r['Collection Fee'] || r['Collection Fees'] || r['Monitoring Fee'] || 0);
     const netFunded     = pNum(r['Net Funded Amount']);
     const backendFees   = pNum(r['Backend Fees']);
     const feesFromPmts  = pNum(r['Fees from Payments']);
@@ -2336,6 +2356,8 @@ function parseAdvanceFunded(rows, ent, period){
       origination,
       commission,
       merchantBankFee,
+      collectionFees,
+      discounts: 0,
       nonCashColl,
       netPayout: 0,
       writeOff,
@@ -2526,7 +2548,9 @@ function parseSyndList(rows, ent, period){
       commAmt,
       totalCommAmt,
       totalSyndCommAmt,
+      discounts: discountsApplied,
       discountsApplied,
+      collectionFees: 0,
       sharedUpfrontFeeRev,
       avgNetDeposits,
       lastPayDate,
@@ -6258,7 +6282,7 @@ function buildHistPerfTable(deals){
         ${lrow('Deals Defaulted',r=>r.dealsDefaulted,fN)}
         ${lrow('% of Deals',r=>r.units?r.dealsDefaulted/r.units:0,fP)}
         ${lsec('RECOVERY RATE')}
-        ${lrow('Recovery Rate',r=>calcRecRate(r.collected,r.funded,r.commission,r.bankFee||0),v=>(v*100).toFixed(2)+'%',v=>v>=1?'var(--green)':v>=0.8?'var(--orange)':'var(--red)')}
+        ${lrow('Recovery Rate',r=>calcRecRate(r.collected,r.funded,r.commission,r.merchantBankFee||0),v=>(v*100).toFixed(2)+'%',v=>v>=1?'var(--green)':v>=0.8?'var(--orange)':'var(--red)')}
       </tbody>
     </table>`;
 
