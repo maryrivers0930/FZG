@@ -1583,9 +1583,19 @@ function handleFSUpload(subtype, input){
           if(statusEl) statusEl.textContent = `⚠ Periods found but no accounts matched. First unrecognized: ${hint||'(none)'}`;
           return;
         }
-        // Merge into STATE.fsData (P&L fields only, preserve BS fields)
+        // Merge into STATE.fsData (P&L fields only, preserve BS fields).
+        // Only copy non-null values so stale null derived fields from the parsed
+        // PL object don't clobber BS totals that were already computed from a
+        // prior Balance Sheet upload. Then re-derive so IS totals are fresh.
         periods.forEach(p => {
-          STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
+          const dest = STATE.fsData[p] || {};
+          const src  = parsed[p] || {};
+          Object.keys(src).forEach(k => { if(src[k] !== null) dest[k] = src[k]; });
+          // Clear derived IS totals so fsDerive recalculates them from new components
+          ['total_income','total_cogs','gross_profit','gross_margin_pct',
+           'total_opex','exp_pct_rev','ebitda','net_income','net_income_pct'].forEach(f=>{ dest[f]=null; });
+          fsDerive(dest);
+          STATE.fsData[p] = dest;
         });
         // Recompute year-level aggregates for any affected years
         const years = [...new Set(periods.map(p=>p.slice(0,4)))];
@@ -1625,6 +1635,24 @@ function handleFSUpload(subtype, input){
         }
         periods.forEach(p => {
           STATE.fsData[p] = Object.assign(STATE.fsData[p]||{}, parsed[p]);
+          // Null out stale derived BS totals so fsDerive recomputes them from the
+          // freshly-merged component fields (cash, ar, fixed_assets, etc.).
+          ['total_cc','total_ocl','total_ncl','total_ca','total_nca','total_assets',
+           'total_cl','total_liab','total_equity','total_liab_equity'].forEach(f=>{ STATE.fsData[p][f]=null; });
+          fsDerive(STATE.fsData[p]);
+        });
+        // Recompute year-level aggregates for any affected years so the annual
+        // aggregate also carries the correct end-of-year BS snapshot.
+        const bsYears = [...new Set(periods.map(p=>p.slice(0,4)))];
+        bsYears.forEach(yr => {
+          const mths = Object.keys(STATE.fsData).filter(k=>k.match(new RegExp(`^${yr}-\\d{2}$`))).sort();
+          if(!mths.length) return;
+          const agg = Object.assign({}, STATE.fsData[mths[mths.length-1]]||{});
+          FS_IS_SUM_FIELDS.forEach(f => { agg[f] = mths.reduce((s,k)=>s+(STATE.fsData[k]?.[f]||0), 0); });
+          ['total_cc','total_ocl','total_ncl','total_ca','total_nca','total_assets',
+           'total_cl','total_liab','total_equity','total_liab_equity'].forEach(f=>{ agg[f]=null; });
+          fsDerive(agg);
+          STATE.fsData[yr] = agg;
         });
         const pRow = document.getElementById('fi-fsb-period-row');
         if(pRow) pRow.style.display = 'none';
