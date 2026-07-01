@@ -403,6 +403,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="tab" onclick="switchTab('time')">📅 Time Analysis</div>
     <div class="tab" onclick="switchTab('recovery')">📈 Recovery Rates</div>
     <div class="tab" onclick="switchTab('fssummary')">📋 FS Summary</div>
+    <div class="tab" onclick="switchTab('kpi')">📐 KPIs</div>
     <div class="tab" onclick="switchTab('variance')">📊 Variance Analysis</div>
     <div class="tab" onclick="switchTab('upload')">📁 Data Upload</div>
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
@@ -625,6 +626,19 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
           <span class="section-sub" id="fsSummarySub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
         </div>
         <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="fsSummaryTable"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== KPI TAB ===== -->
+  <div id="tab-kpi" class="tab-content">
+    <div style="padding:16px 20px">
+      <div class="section">
+        <div class="section-hdr">
+          <span class="section-title">Key Performance Indicators (KPIs)</span>
+          <span class="section-sub" id="kpiSub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
+        </div>
+        <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="kpiTable"></table></div>
       </div>
     </div>
   </div>
@@ -3219,6 +3233,7 @@ function buildAllViews(){
   try { buildRecoveryTab(); } catch(e){ console.error('buildRecoveryTab error:', e); }
   try { buildComputedMetrics(deals); } catch(e){ console.error('buildComputedMetrics error:', e); }
   try { buildFSWorkbookSections(deals); } catch(e){ console.error('buildFSWorkbookSections error:', e); }
+  try { buildKPITab(deals); } catch(e){ console.error('buildKPITab error:', e); }
   try { updateFSUploadInfo(); } catch(e){}
   // Pass the already-filtered dataset directly — single source of truth
   buildHistPerfTable(deals);
@@ -4977,7 +4992,117 @@ function buildFSSummaryTables(deals){
     ${fRow('Net Income',                         'net_income',       'netIncome',    false, true)}
     ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',     true,  false)}
     ${wRow('Growth',                             'growth',           true,  false)}
+  </tbody>`;
+}
 
+function buildKPITab(deals){
+  deals = deals || getFilteredDeals();
+
+  const byPeriod = {};
+  deals.forEach(d => {
+    const k = periodKey(d.fundedDate, STATE.groupBy);
+    if(!byPeriod[k]) byPeriod[k] = [];
+    byPeriod[k].push(d);
+  });
+  { const _ff = STATE.filters.dateFrom ? STATE.filters.dateFrom.slice(0,7) : null;
+    const _ft = STATE.filters.dateTo   ? STATE.filters.dateTo.slice(0,7)   : null;
+    Object.keys(STATE.fsData).forEach(fsKey => {
+      if(!fsKey.match(/^\d{4}-\d{2}$/)) return;
+      if(_ff && fsKey < _ff) return;
+      if(_ft && fsKey > _ft) return;
+      const k = periodKey(fsKey + '-15', STATE.groupBy);
+      if(!byPeriod[k]) byPeriod[k] = [];
+    });
+  }
+  const allSortedPeriods = Object.keys(byPeriod).sort();
+  const periods = allSortedPeriods.slice(-12);
+
+  const sub = document.getElementById('kpiSub');
+  const gbLabel = STATE.groupBy==='month'?'Monthly':STATE.groupBy==='quarter'?'Quarterly':'Annual';
+  const clipped = allSortedPeriods.length > periods.length;
+  if(sub) sub.textContent = `${gbLabel} · ${periods.length} period${periods.length!==1?'s':''}${clipped?' (most recent 12)':''}`;
+
+  const tbl = document.getElementById('kpiTable');
+  if(!tbl) return;
+  if(!periods.length){
+    tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">No data for current filters</td></tr></tbody>';
+    return;
+  }
+
+  const dm = {}, wbd = {};
+  periods.forEach(p => {
+    dm[p]  = computeFSMetrics(byPeriod[p] || []);
+    wbd[p] = getFSWbRow(p);
+  });
+  const periodDeals = periods.flatMap(p => byPeriod[p] || []);
+  const allDm  = computeFSMetrics(periodDeals);
+  const allWbd = getFSWbAllPeriods(periods);
+
+  const N = periods.length, showTotal = N > 1;
+  const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
+
+  function cell(val, isPct, bold){
+    const missing = val == null || val === undefined || (typeof val==='number' && isNaN(val));
+    const disp = missing ? '—'
+      : isPct ? (val*100).toFixed(2)+'%'
+      : fmtFS(val, false);
+    const s = bold
+      ? 'text-align:right;font-weight:700;color:var(--blue)'
+      : missing ? 'text-align:right;color:var(--muted)' : 'text-align:right';
+    return `<td style="${s}">${disp}</td>`;
+  }
+  function sHdr(label, sub=false){
+    const bg  = sub ? 'rgba(30,36,50,.6)' : 'rgba(139,92,246,.1)';
+    const clr = sub ? 'var(--muted)' : 'var(--purple)';
+    const pl  = sub ? '20px' : '8px';
+    return `<tr style="background:${bg}"><td colspan="${N+1+(showTotal?1:0)}"
+      style="font-weight:700;font-size:11px;color:${clr};text-transform:uppercase;letter-spacing:.5px;padding:5px ${pl}"
+      >${label}</td></tr>`;
+  }
+  function wRow(label, field, isPct, bold){
+    const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold)).join('');
+    const tot   = showTotal ? cell(allWbd[field], isPct, bold) : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+  // Cross-source: QB dollar amount / deal-computed denominator
+  function kRow(label, wbdNum, dmDenom, bold){
+    const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => {
+      const num = (wbd[p]||{})[wbdNum];
+      const den = (dm[p]||{})[dmDenom];
+      return cell(num != null && den ? num / den : null, true, bold);
+    }).join('');
+    const tot = showTotal ? (()=>{
+      const num = allWbd[wbdNum];
+      const den = allDm[dmDenom];
+      return cell(num != null && den ? num / den : null, true, bold);
+    })() : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+  // Both numerator and denominator from QB data (wbd)
+  function cRow(label, numField, denField, bold){
+    const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
+    const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
+    const cells = periods.map(p => {
+      const w = wbd[p] || {};
+      const ratio = w[denField] ? (w[numField]||0) / w[denField] : null;
+      return cell(ratio, true, bold);
+    }).join('');
+    const tot = showTotal ? (()=>{
+      const ratio = allWbd[denField] ? (allWbd[numField]||0) / allWbd[denField] : null;
+      return cell(ratio, true, bold);
+    })() : '';
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
+  }
+
+  const thCols  = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
+  const thTotal = showTotal ? `<th style="text-align:right;color:var(--purple);white-space:nowrap">Total</th>` : '';
+  const thead   = `<thead><tr><th style="min-width:240px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
+
+  tbl.innerHTML = thead + `<tbody>
     ${sHdr('KPIs / Profit & Loss Metrics')}
     ${sHdr('Income As % of Funded Amount', true)}
     ${kRow('Collection Fee Income % of Funded',      'coll_fee_income',   'funded', false)}
@@ -5003,7 +5128,8 @@ function buildFSSummaryTables(deals){
     ${kRow('Software Expense % of Funded',           'software_exp',      'funded', false)}
     ${kRow('Payroll % of Funded',                    'payroll_total',     'funded', false)}
     ${kRow('Professional Fees % of Funded',          'prof_fees',         'funded', false)}
-    ${kRow('Sales & Marketing % of Funded',          'sales_mktg',        'funded', false)}
+    ${kRow('Insurance % of Funded',                  'insurance',         'funded', false)}
+    ${kRow('Utilities % of Funded',                  'utilities',         'funded', false)}
     ${kRow('Rent % of Funded',                       'rent',              'funded', false)}
     ${kRow('Total Expenses % of Funded',             'total_opex',        'funded', true)}
     ${kRow('Net Income % of Funded',                 'net_income',        'funded', true)}
@@ -5011,53 +5137,44 @@ function buildFSSummaryTables(deals){
     ${wRow('Bank Fees % of Origination Income',      'kpi_bankfees_pct_orig',  true, false)}
     ${wRow('Office Expenses % of Origination Income','kpi_office_pct_orig',    true, false)}
     ${wRow('Software Expense % of Origination Income','kpi_software_pct_orig', true, false)}
+    ${cRow('Payroll % of Origination Income',        'payroll_total','orig_income', false)}
     ${wRow('Professional Fees % of Origination Income','kpi_proffees_pct_orig',true, false)}
     ${wRow('Sales & Marketing % of Origination Income','kpi_sales_pct_orig',   true, false)}
+    ${cRow('Insurance % of Origination Income',      'insurance',   'orig_income', false)}
     ${wRow('Transportation & Travel % of Origination Income','kpi_travel_pct_orig',true,false)}
+    ${cRow('Utilities % of Origination Income',      'utilities',   'orig_income', false)}
     ${wRow('Rent % of Origination Income',           'kpi_rent_pct_orig',      true, false)}
     ${wRow('Total Expenses % of Origination Income', 'total_exp_pct_orig',     true, true)}
     ${sHdr('Expenses As % of Revenue', true)}
     ${wRow('Bank Fees % of Revenue',                 'kpi_bankfees_pct_rev',   true, false)}
     ${wRow('Office Expenses % of Revenue',           'kpi_office_pct_rev',     true, false)}
     ${wRow('Software Expense % of Revenue',          'kpi_software_pct_rev',   true, false)}
+    ${cRow('Payroll % of Revenue',                   'payroll_total','total_income', false)}
     ${wRow('Professional Fees % of Revenue',         'kpi_proffees_pct_rev',   true, false)}
     ${wRow('Sales & Marketing % of Revenue',         'kpi_sales_pct_rev',      true, false)}
+    ${cRow('Transportation & Travel % of Revenue',   'travel',      'total_income', false)}
+    ${cRow('Utilities % of Revenue',                 'utilities',   'total_income', false)}
+    ${cRow('Rent % of Revenue',                      'rent',        'total_income', false)}
     ${wRow('Total Expenses % of Revenue',            'total_exp_pct_rev',      true, true)}
-    ${(()=>{
-      // Expenses As % of Management Fees — computed dynamically as each_expense / mgmt_fee_income
-      function cRow(label, numField, bold){
-        const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
-        const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
-        const cells = periods.map(p => {
-          const w = wbd[p] || {};
-          const ratio = w.mgmt_fee_income ? (w[numField]||0) / w.mgmt_fee_income : null;
-          return cell(ratio, true, bold);
-        }).join('');
-        const tot = showTotal ? (()=>{
-          const ratio = allWbd.mgmt_fee_income ? (allWbd[numField]||0) / allWbd.mgmt_fee_income : null;
-          return cell(ratio, true, bold);
-        })() : '';
-        return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
-      }
-      return sHdr('Expenses As % of Management Fees', true)
-        + cRow('Bank Fees % of Management Fees',           'bank_fees',    false)
-        + cRow('Office Expenses % of Management Fees',     'office_exp',   false)
-        + cRow('Software Expense % of Management Fees',    'software_exp', false)
-        + cRow('Professional Fees % of Management Fees',   'prof_fees',    false)
-        + cRow('Sales & Marketing % of Management Fees',   'sales_mktg',   false)
-        + cRow('Total Expenses % of Management Fees',      'total_opex',   true);
-    })()}
+    ${sHdr('Expenses As % of Management Fees', true)}
+    ${cRow('Bank Fees % of Management Fees',         'bank_fees',   'mgmt_fee_income', false)}
+    ${cRow('Office Expenses % of Management Fees',   'office_exp',  'mgmt_fee_income', false)}
+    ${cRow('Software Expense % of Management Fees',  'software_exp','mgmt_fee_income', false)}
+    ${cRow('Payroll % of Management Fees',           'payroll_total','mgmt_fee_income',false)}
+    ${cRow('Professional Fees % of Management Fees', 'prof_fees',   'mgmt_fee_income', false)}
+    ${cRow('Sales & Marketing % of Management Fees', 'sales_mktg',  'mgmt_fee_income', false)}
+    ${cRow('Total Expenses % of Management Fees',    'total_opex',  'mgmt_fee_income', true)}
     ${sHdr('Management Fee % of Collections', true)}
-    ${wRow('Total Collections',                      'mgmt_coll_total',           false, true)}
-    ${wRow('ACH Deal Collections',                   'mgmt_coll_ach_deal',        false, false)}
-    ${wRow('Asset Backed Collections',               'mgmt_coll_asset',           false, false)}
-    ${wRow('Reverse Consolidation Collections',      'mgmt_coll_rev_con',         false, false)}
-    ${wRow('ACH Collections',                        'mgmt_coll_ach',             false, false)}
-    ${wRow('Wire Transfer Collections',              'mgmt_coll_wire',            false, false)}
-    ${wRow('Payments from MCA Collections',          'mgmt_coll_mca',             false, false)}
-    ${wRow('Other Collections',                      'mgmt_coll_other',           false, false)}
-    ${wRow('Total Management Fees',                  'mgmt_total_fees',           false, true)}
-    ${wRow('Management Fee %',                       'mgmt_fee_pct',              true,  true)}
+    ${wRow('Total Collections',                      'mgmt_coll_total',    false, true)}
+    ${wRow('ACH Deal Collections',                   'mgmt_coll_ach_deal', false, false)}
+    ${wRow('Asset Backed Collections',               'mgmt_coll_asset',    false, false)}
+    ${wRow('Reverse Consolidation Collections',      'mgmt_coll_rev_con',  false, false)}
+    ${wRow('ACH Collections',                        'mgmt_coll_ach',      false, false)}
+    ${wRow('Wire Transfer Collections',              'mgmt_coll_wire',     false, false)}
+    ${wRow('Payments from MCA Collections',          'mgmt_coll_mca',      false, false)}
+    ${wRow('Other Collections',                      'mgmt_coll_other',    false, false)}
+    ${wRow('Total Management Fees',                  'mgmt_total_fees',    false, true)}
+    ${wRow('Management Fee %',                       'mgmt_fee_pct',       true,  true)}
   </tbody>`;
 }
 
@@ -6121,13 +6238,14 @@ function switchTab(t){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const tc=document.getElementById('tab-'+t); if(tc) tc.classList.add('active');
-  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','fssummary','variance','upload','share'];
+  const tabs=['histperf','cover','portfolio','dimensions','time','recovery','fssummary','kpi','variance','upload','share'];
   const idx=tabs.indexOf(t);
   if(idx>=0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if(t==='share') buildShareTab();
   if(t==='histperf') buildHistPerfTable(getFilteredDeals());
   if(t==='cover') matchIsoHeight();
   if(t==='fssummary') buildFSSummaryTables(getFilteredDeals());
+  if(t==='kpi') buildKPITab(getFilteredDeals());
   if(t==='variance') buildFSVarianceTables();
   if(t==='recovery') requestAnimationFrame(()=>{
     try{ buildRecoveryTab(); }
