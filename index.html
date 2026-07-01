@@ -1938,7 +1938,8 @@ function parseNum(v){ if(v===''||v===null||v===undefined) return 0; return parse
 // Upfront TPC = Funded + Commission − Merchant Bank Fee  (row 179 = row 169 + row 175 − row 177)
 function calcRecRate(collected, funded, commission, bankFee){
   const denom = funded + (commission||0) - (bankFee||0);
-  return denom > 0 ? collected / denom : 0;
+  if(denom <= 0) return 0;
+  return Math.min(1, collected / denom);
 }
 
 const PERFORMING_STATUSES = ['active','performing','closed','closed, incomplete','closed incomplete','legal - collections pif'];
@@ -2290,9 +2291,10 @@ function parseAdvanceFunded(rows, ent, period){
     const rtr     = pNum(r['RTR']);
     const factor  = amount > 0 && rtr > 0 ? parseFloat((rtr/amount).toFixed(4)) : 0;
     // Extract term in days; validate to reject corrupted rows where RTR amounts bleed into term columns
-    const _termCal = pNum(r['Term - Calendar Days']);
-    const _termBiz = pNum(r['Term - Business Days']);
-    const _termRaw = _termCal > 0 ? _termCal : _termBiz;
+    const _termCal = pNum(r['Term - Calendar Days'] || r['Calendar Days'] || r['Term (Calendar Days)'] || 0);
+    const _termBiz = pNum(r['Term - Business Days'] || r['Business Days'] || r['Term (Business Days)'] || r['Term Days'] || 0);
+    const _termGeneric = pNum(r['Term'] || r['Term Length'] || r['Deal Term'] || r['Term (Days)'] || 0);
+    const _termRaw = _termCal > 0 ? _termCal : (_termBiz > 0 ? _termBiz : _termGeneric);
     const term = (_termRaw >= 1 && _termRaw <= 1825) ? _termRaw : 0;
     const collected  = pNum(r['Cash Collections']);
     const nonCashColl= pNum(r['Non Cash Collections']);
@@ -4330,11 +4332,27 @@ const QB_PL_ACCOUNT_MAP = {
   'funding income': 'orig_income',
   'portfolio income': 'orig_income',
   'income from advances': 'orig_income',
+  'mca revenue': 'orig_income',
+  'mca income': 'orig_income',
+  'factoring revenue': 'orig_income',
+  'factoring income': 'orig_income',
+  'factoring fee income': 'orig_income',
+  'advance fees': 'orig_income',
+  'origination revenue': 'orig_income',
+  'revenue from mca': 'orig_income',
+  'mca origination': 'orig_income',
+  'program income': 'orig_income',
+  'program revenue': 'orig_income',
   // ── Collection fee income ─────────────────────────────────────────────────
   'collection fee income': 'coll_fee_income',
   'collection fee': 'coll_fee_income',
   'collection fees': 'coll_fee_income',
   'collections income': 'coll_fee_income',
+  'collection income': 'coll_fee_income',
+  'late payment fees': 'coll_fee_income',
+  'late fees': 'coll_fee_income',
+  'account monitoring fee income': 'coll_fee_income',
+  'monitoring income': 'coll_fee_income',
   // ── Monthly / monitoring fee income ───────────────────────────────────────
   'monthly fee income': 'monthly_fee_income',
   'monthly fee': 'monthly_fee_income',
@@ -4346,6 +4364,11 @@ const QB_PL_ACCOUNT_MAP = {
   // ── Commission fee income (revenue side) ──────────────────────────────────
   'commission fee income': 'comm_fee_income',
   'commission income': 'comm_fee_income',
+  'commission revenue': 'comm_fee_income',
+  'iso commission revenue': 'comm_fee_income',
+  'syndicator commission income': 'comm_fee_income',
+  'upfront commission income': 'comm_fee_income',
+  'commission fees': 'comm_fee_income',
   // ── Default fee income ────────────────────────────────────────────────────
   'default fee income': 'default_fee_income',
   'default fee': 'default_fee_income',
@@ -4376,6 +4399,12 @@ const QB_PL_ACCOUNT_MAP = {
   'referral fees': 'comm_exp',
   // ── COGS: other ───────────────────────────────────────────────────────────
   'other cogs': 'other_cogs',
+  'other cost of goods sold': 'other_cogs',
+  'other cost of revenue': 'other_cogs',
+  'other direct costs': 'other_cogs',
+  'cost of revenue': 'other_cogs',
+  'program costs': 'other_cogs',
+  'direct costs': 'other_cogs',
   'cost of goods sold': 'total_cogs',
   'total cost of goods sold': 'total_cogs',
   'total cogs': 'total_cogs',
@@ -4551,6 +4580,10 @@ const QB_BS_ACCOUNT_MAP = {
   'syndicator payable': 'synd_payable',
   'syndication payable': 'synd_payable',
   'syndicators payable': 'synd_payable',
+  'syndicate partners payable': 'synd_payable',
+  'syndication partners payable': 'synd_payable',
+  'partners payable': 'synd_payable',
+  'synd partners payable': 'synd_payable',
   'iso payable': 'iso_payable',
   'iso commissions payable': 'iso_payable',
   'broker payable': 'iso_payable',
