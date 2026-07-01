@@ -5054,18 +5054,17 @@ function buildKPITab(deals){
     return `<td style="${s}">${disp}</td>`;
   }
 
-  // Level 0: top-level section divider (e.g. "Profit and Loss Metrics")
+  // Level 0: section divider beneath the tab title (e.g. "Profit and Loss Metrics")
   function secHdr(label){
-    return `<tr style="background:rgba(139,92,246,.15);border-top:2px solid var(--purple)">
-      <td colspan="${COLS}" style="font-weight:800;font-size:13px;color:var(--purple);
-        padding:8px 12px;letter-spacing:.02em">${label}</td></tr>`;
+    return `<tr style="background:rgba(88,166,255,.10);border-top:2px solid var(--blue)">
+      <td colspan="${COLS}" style="font-weight:800;font-size:12px;color:var(--blue);
+        text-transform:uppercase;letter-spacing:.08em;padding:7px 14px">${label}</td></tr>`;
   }
-  // Level 1: category header (e.g. "Income as % of Funded Amount")
+  // Level 1: category header — visually the most prominent sub-divider
   function catHdr(label){
-    return `<tr style="background:rgba(30,36,50,.7)">
-      <td colspan="${COLS}" style="font-weight:700;font-size:11px;color:var(--text);
-        text-transform:uppercase;letter-spacing:.5px;padding:6px 12px 6px 16px;
-        border-left:3px solid var(--blue)">${label}</td></tr>`;
+    return `<tr style="background:rgba(30,36,50,.55)">
+      <td colspan="${COLS}" style="font-weight:700;font-size:12px;color:var(--text);
+        padding:6px 12px 6px 20px;border-left:3px solid var(--purple)">${label}</td></tr>`;
   }
   // Individual metric row — reads from wbd (pre-stored field)
   function wRow(label, field, isPct, bold){
@@ -5113,97 +5112,100 @@ function buildKPITab(deals){
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
+  // Level -1: top-level tab title (e.g. "Key Performance Indicators (KPIs)")
+  function topHdr(label){
+    return `<tr style="background:rgba(139,92,246,.2);border-top:3px solid var(--purple)">
+      <td colspan="${COLS}" style="font-weight:900;font-size:15px;color:var(--purple);
+        padding:10px 14px;letter-spacing:.03em">${label}</td></tr>`;
+  }
+
   const thCols  = colLabels.map(l=>`<th style="text-align:right;white-space:nowrap">${l}</th>`).join('');
   const thTotal = showTotal ? `<th style="text-align:right;color:var(--purple);white-space:nowrap">Total</th>` : '';
-  const thead   = `<thead><tr><th style="min-width:260px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
+  const thead   = `<thead><tr><th style="min-width:280px">Line Item</th>${thCols}${thTotal}</tr></thead>`;
 
   tbl.innerHTML = thead + `<tbody>
+    ${topHdr('Key Performance Indicators (KPIs)')}
     ${secHdr('Profit and Loss Metrics')}
 
-    ${catHdr('Income as % of Funded Amount')}
+    ${catHdr('Income As % of Funded Amount')}
+    ${kRow('Origination Income',                 'orig_income',       'funded', false)}
     ${kRow('Collection Fee Income',              'coll_fee_income',   'funded', false)}
     ${kRow('Monthly Fee Income',                 'monthly_fee_income','funded', false)}
     ${kRow('Commission Fee Income',              'comm_fee_income',   'funded', false)}
     ${kRow('Default Fee Income',                 'default_fee_income','funded', false)}
     ${kRow('Management Fee Income',              'mgmt_fee_income',   'funded', false)}
-    ${kRow('Total Income as % of Funded Amount', 'total_income',      'funded', true)}
+    ${kRow('Total Income As % of Funded Amount', 'total_income',      'funded', true)}
 
-    ${catHdr('Income as % of Collection')}
+    ${catHdr('Income As % of Collection')}
+    ${kRow('Origination Income',                    'orig_income',       'collected', false)}
     ${kRow('Collection Fee Income',                 'coll_fee_income',   'collected', false)}
     ${kRow('Monthly Fee Income',                    'monthly_fee_income','collected', false)}
     ${kRow('Commission Fee Income',                 'comm_fee_income',   'collected', false)}
     ${kRow('Default Fee Income',                    'default_fee_income','collected', false)}
     ${kRow('Management Fee Income',                 'mgmt_fee_income',   'collected', false)}
-    ${kRow('Total Income as % of Collection',       'total_income',      'collected', true)}
+    ${kRow('Total Income As % of Collection',       'total_income',      'collected', true)}
 
-    ${catHdr('Cost of Goods Sold as % of Funded Amount')}
-    ${kRow('Commission Expenses',                       'comm_exp',  'funded', false)}
-    ${kRow('Other Cost of Goods Sold',                  'other_cogs','funded', false)}
-    ${kRow('Total Cost of Goods Sold as % of Funded Amount','total_cogs','funded', true)}
+    ${catHdr('Cost of Goods Sold As % of Funded Amount')}
+    ${kRow('Commission Expenses',                             'comm_exp',  'funded', false)}
+    ${kRow('Other Cost of Goods Sold',                        'other_cogs','funded', false)}
+    ${kRow('Total Cost of Goods Sold As % of Funded Amount',  'total_cogs','funded', true)}
 
     ${catHdr('Expenses as % of Funded Amount')}
-    ${kRow('Bank Fees & Service Charges',         'bank_fees',     'funded', false)}
+    ${kRow('Bank fees & service charges',         'bank_fees',     'funded', false)}
     ${kRow('Office Expenses',                     'office_exp',    'funded', false)}
     ${kRow('Software Expense',                    'software_exp',  'funded', false)}
-    ${kRow('Payroll and Related Expenses',        'payroll_total', 'funded', false)}
+    ${kRow('Payroll and related expenses',        'payroll_total', 'funded', false)}
     ${kRow('Professional Fees',                   'prof_fees',     'funded', false)}
     ${kRow('Sales & Marketing Expenses',          'sales_mktg',    'funded', false)}
-    ${kRow('Insurance',                           'insurance',     'funded', false)}
-    ${kRow('Utilities',                           'utilities',     'funded', false)}
+    ${kRow('Transportation and Travel',           'travel',        'funded', false)}
     ${kRow('Rent Expenses',                       'rent',          'funded', false)}
     ${kRow('Total Expenses as % of Funded Amount','total_opex',    'funded', true)}
     ${kRow('Net Income as % of Funded Amount',    'net_income',    'funded', true)}
 
     ${catHdr('Expenses as % of Origination Income')}
-    ${wRow('Bank Fees & Service Charges',              'kpi_bankfees_pct_orig',  true, false)}
+    ${wRow('Bank fees & service charges',              'kpi_bankfees_pct_orig',  true, false)}
     ${wRow('Office Expenses',                          'kpi_office_pct_orig',    true, false)}
     ${wRow('Software Expense',                         'kpi_software_pct_orig',  true, false)}
-    ${cRow('Payroll and Related Expenses',             'payroll_total','orig_income', false)}
+    ${cRow('Payroll and related expenses',             'payroll_total','orig_income', false)}
     ${wRow('Professional Fees',                        'kpi_proffees_pct_orig',  true, false)}
     ${wRow('Sales & Marketing Expenses',               'kpi_sales_pct_orig',     true, false)}
-    ${cRow('Insurance',                                'insurance',   'orig_income', false)}
     ${wRow('Transportation and Travel',                'kpi_travel_pct_orig',    true, false)}
-    ${cRow('Utilities',                                'utilities',   'orig_income', false)}
     ${wRow('Rent Expenses',                            'kpi_rent_pct_orig',      true, false)}
     ${wRow('Total Expenses as % of Origination Income','total_exp_pct_orig',     true, true)}
 
     ${catHdr('Expenses as % of Revenue')}
-    ${wRow('Bank Fees & Service Charges',    'kpi_bankfees_pct_rev',  true, false)}
+    ${wRow('Bank fees & service charges',    'kpi_bankfees_pct_rev',  true, false)}
     ${wRow('Office Expenses',                'kpi_office_pct_rev',    true, false)}
     ${wRow('Software Expense',               'kpi_software_pct_rev',  true, false)}
-    ${cRow('Payroll and Related Expenses',   'payroll_total','total_income', false)}
+    ${cRow('Payroll and related expenses',   'payroll_total','total_income', false)}
     ${wRow('Professional Fees',              'kpi_proffees_pct_rev',  true, false)}
     ${wRow('Sales & Marketing Expenses',     'kpi_sales_pct_rev',     true, false)}
-    ${cRow('Net Income',                     'net_income',  'total_income', false)}
     ${cRow('Transportation and Travel',      'travel',      'total_income', false)}
-    ${cRow('Utilities',                      'utilities',   'total_income', false)}
     ${cRow('Rent Expenses',                  'rent',        'total_income', false)}
     ${wRow('Total Expenses as % of Revenue', 'total_exp_pct_rev',     true, true)}
 
     ${catHdr('Expenses as % of Management Fees')}
-    ${cRow('Bank Fees & Service Charges',           'bank_fees',     'mgmt_fee_income', false)}
+    ${cRow('Bank fees & service charges',           'bank_fees',     'mgmt_fee_income', false)}
     ${cRow('Office Expenses',                       'office_exp',    'mgmt_fee_income', false)}
     ${cRow('Software Expense',                      'software_exp',  'mgmt_fee_income', false)}
-    ${cRow('Payroll and Related Expenses',          'payroll_total', 'mgmt_fee_income', false)}
+    ${cRow('Payroll and related expenses',          'payroll_total', 'mgmt_fee_income', false)}
     ${cRow('Professional Fees',                     'prof_fees',     'mgmt_fee_income', false)}
     ${cRow('Sales & Marketing Expenses',            'sales_mktg',    'mgmt_fee_income', false)}
-    ${cRow('Net Income',                            'net_income',    'mgmt_fee_income', false)}
     ${cRow('Transportation and Travel',             'travel',        'mgmt_fee_income', false)}
-    ${cRow('Utilities',                             'utilities',     'mgmt_fee_income', false)}
     ${cRow('Rent Expenses',                         'rent',          'mgmt_fee_income', false)}
     ${cRow('Total Expenses as % of Management Fees','total_opex',    'mgmt_fee_income', true)}
 
     ${catHdr('Management Fee % of Collections')}
-    ${wRow('Total Collections',          'mgmt_coll_total',    false, true)}
-    ${wRow('ACH',                        'mgmt_coll_ach_deal', false, false)}
-    ${wRow('Asset Backed',               'mgmt_coll_asset',    false, false)}
-    ${wRow('Reverse Consolidation',      'mgmt_coll_rev_con',  false, false)}
-    ${wRow('ACH',                        'mgmt_coll_ach',      false, false)}
-    ${wRow('Wire Transfer',              'mgmt_coll_wire',     false, false)}
-    ${wRow('Payments from MCA',          'mgmt_coll_mca',      false, false)}
-    ${wRow('Other',                      'mgmt_coll_other',    false, false)}
-    ${wRow('Total Management Fees',      'mgmt_total_fees',    false, true)}
-    ${wRow('Management Fee % of Collections','mgmt_fee_pct',   true,  true)}
+    ${wRow('Total Collections',              'mgmt_coll_total',    false, true)}
+    ${wRow('ACH',                            'mgmt_coll_ach_deal', false, false)}
+    ${wRow('Asset Backed',                   'mgmt_coll_asset',    false, false)}
+    ${wRow('Reverse Consolidation',          'mgmt_coll_rev_con',  false, false)}
+    ${wRow('ACH',                            'mgmt_coll_ach',      false, false)}
+    ${wRow('Wire transfer',                  'mgmt_coll_wire',     false, false)}
+    ${wRow('Payments from MCA',              'mgmt_coll_mca',      false, false)}
+    ${wRow('Other',                          'mgmt_coll_other',    false, false)}
+    ${wRow('Total Management Fees',          'mgmt_total_fees',    false, true)}
+    ${wRow('Management Fee % of Collections','mgmt_fee_pct',       true,  true)}
   </tbody>`;
 }
 
