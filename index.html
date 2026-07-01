@@ -1161,8 +1161,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Ensure recoveryHistory is always an array (old SNAP versions stored it as object)
     if(!Array.isArray(ent.recoveryHistory)) ent.recoveryHistory = [];
     // Back-fill sicIndustry from sicCode for deals saved before this field was derived
+    // Back-fill numeric fields absent from older SNAP versions so accumulators get 0 not NaN
     Object.values(ent.dealsByPeriod||{}).forEach(arr=>(arr||[]).forEach(d=>{
       if(!d.sicIndustry && d.sicCode) d.sicIndustry = sicCodeToIndustry(d.sicCode);
+      if(d.merchantBankFee == null) d.merchantBankFee = 0;
+      if(d.discounts      == null) d.discounts       = 0;
+      if(d.collectionFees == null) d.collectionFees  = 0;
+      if(d.mgmtFee        == null) d.mgmtFee         = 0;
     }));
   });
 
@@ -2294,10 +2299,17 @@ function parseAdvanceFunded(rows, ent, period){
     const remaining  = pNum(r['RTR Balance']);
     const commission = pNum(r['Upfront Commission']);
     const origination= pNum(r['Upfront Fees Withheld from Funding']);
-    // Mark Up = Merchant Bank Fee (Syndicator Bank Fee in the reference FS model)
-    // Used in Upfront TPC denominator for Recovery Rate
-    const merchantBankFee = pNum(r['Mark Up']);
-    const mgmtFee = pNum(r['Total Syndication - Upfront Management Fee']);
+    // Mark Up = Merchant Bank Fee; try every known AF Report column alias
+    const merchantBankFee = pNum(
+      r['Mark Up'] || r['Bank Fee'] || r['Merchant Bank Fee'] ||
+      r['Processing Fee'] || r['ACH Fee'] || r['Wire Fee'] ||
+      r['Upfront Bank Fee'] || r['Lender Fee'] || 0
+    );
+    const mgmtFee = pNum(
+      r['Total Syndication - Upfront Management Fee'] ||
+      r['Management Fee'] || r['Mgmt Fee'] || r['Total Mgmt Fees ($)'] ||
+      r['Total Mgmt Fees'] || r['Monthly Fee'] || r['Monitoring Fee Amount'] || 0
+    );
     const dealType  = String(r['Product Type']||'').trim() || 'ACH';
     const engagement= String(r['Engagement']||'').trim();
     const status    = mapStatus(r['Status'], r['AM Status']);
