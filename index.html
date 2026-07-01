@@ -1168,6 +1168,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if(d.discounts      == null) d.discounts       = 0;
       if(d.collectionFees == null) d.collectionFees  = 0;
       if(d.mgmtFee        == null) d.mgmtFee         = 0;
+      if(d.nonCashColl    == null) d.nonCashColl     = 0;
+      if(d.payMca         == null) d.payMca          = 0;
     }));
   });
 
@@ -6242,9 +6244,11 @@ function buildHistPerfTable(deals){
     const MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     // Aggregate helper
-    const emptyBucket = ()=>({funded:0,units:0,rtr:0,collected:0,remaining:0,factorSum:0,factorCount:0,defaultAmt:0,dealsDefaulted:0,performingAmt:0,slowPayAmt:0,termSum:0,termCount:0,origination:0,commission:0,ftf:0,mgmtFees:0,merchantBankFee:0,discounts:0,collectionFees:0});
+    const emptyBucket = ()=>({funded:0,units:0,rtr:0,collected:0,renewalColl:0,remaining:0,factorSum:0,factorCount:0,defaultAmt:0,dealsDefaulted:0,performingAmt:0,slowPayAmt:0,termSum:0,termCount:0,origination:0,commission:0,ftf:0,mgmtFees:0,merchantBankFee:0,discounts:0,collectionFees:0});
     const addDeal = (b,d)=>{
       b.funded+=d.amount; b.units++; b.rtr+=d.rtr; b.collected+=d.collected; b.remaining+=d.remaining;
+      // Renewal Collections: Non-Cash Collections (AF Report) or Payments from MCA Renewals (Closing Report)
+      b.renewalColl+=(d.nonCashColl||0)+(d.payMca||0);
       if(d.factor>0){b.factorSum+=d.factor; b.factorCount++;}
       if(d.term>0){b.termSum+=d.term; b.termCount++;}
       if(isDefault(d.status)){b.defaultAmt+=d.amount; b.dealsDefaulted++;}
@@ -6313,7 +6317,8 @@ function buildHistPerfTable(deals){
         ${lrow('Commissions % of Funded',r=>r.funded?r.commission/r.funded:0,fP)}
         ${lrow('Merchant Bank Fee',r=>r.merchantBankFee,fC)}
         ${lrow('Bank Fees % of Funded',r=>r.funded?r.merchantBankFee/r.funded:0,fP)}
-        ${lrow('Collected',r=>r.collected,fC,'var(--green)')}
+        ${lrow('Actual Collections',r=>r.collected,fC,'var(--green)')}
+        ${lrow('Renewal Collections',r=>r.renewalColl,fC,'var(--green)')}
         ${lrow('Management Fees',r=>r.mgmtFees,fC)}
         ${lrow('Discounts',r=>r.discounts,fC)}
         ${lrow('Collection Fees',r=>r.collectionFees,fC)}
