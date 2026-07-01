@@ -550,9 +550,13 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
     </div>
     <div class="chart-row">
-      <div class="chart-box" style="grid-column:1/-1">
+      <div class="chart-box">
         <div class="chart-title">Deal Status &amp; Default Exposure</div>
         <div class="chart-wrap"><canvas id="covStatusChart"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Collections Breakdown by Period</div>
+        <div class="chart-wrap"><canvas id="covCollBreakdownChart"></canvas></div>
       </div>
     </div>
 
@@ -3710,9 +3714,10 @@ function buildCover(deals){
   const byP={};
   deals.forEach(d=>{
     const k=periodKey(d.fundedDate,STATE.groupBy);
-    if(!byP[k]) byP[k]={funded:0,collected:0,commission:0,bankFee:0};
+    if(!byP[k]) byP[k]={funded:0,collected:0,commission:0,bankFee:0,renewalColl:0};
     byP[k].funded+=d.amount; byP[k].collected+=d.collected;
     byP[k].commission+=(d.commission||0); byP[k].bankFee+=(d.merchantBankFee||0);
+    byP[k].renewalColl+=(d.nonCashColl||0)+(d.payMca||0);
   });
   const pKeys=Object.keys(byP).sort();
   makeChart('covFundedChart','bar',{
@@ -3731,6 +3736,14 @@ function buildCover(deals){
     labels:statuses.map(([k])=>k),
     datasets:[{data:statuses.map(([,v])=>v),backgroundColor:sColors,borderWidth:1,borderColor:'#0d1117'}]
   },{legendPos:'right',tooltipFn:ctx=>'$'+(ctx.raw/1e6).toFixed(2)+'M ('+fmtPct(ctx.raw/totalFunded)+')'});
+
+  makeChart('covCollBreakdownChart','bar',{
+    labels:pKeys.map(p=>periodLabel(p,STATE.groupBy)),
+    datasets:[
+      {label:'Actual Collections',data:pKeys.map(p=>byP[p].collected-(byP[p].renewalColl||0)),backgroundColor:'rgba(63,185,80,.75)',borderRadius:4,stack:'coll'},
+      {label:'Renewal Collections',data:pKeys.map(p=>byP[p].renewalColl||0),backgroundColor:'rgba(56,189,248,.65)',borderRadius:4,stack:'coll'},
+    ]
+  },{yFmt:v=>fmt$(v),tooltipFn:ctx=>ctx.dataset.label+': '+fmt$(ctx.raw),extra:{scales:{x:{stacked:true},y:{stacked:true}}}});
 
   // Syndicator breakdown — prefer Syndication Report (sl) data, fallback to white label aggregation
   const slDeals = getSyndReportDeals();
