@@ -4954,11 +4954,11 @@ function buildFSSummaryTables(deals){
   const dm = {}, wbd = {};
   periods.forEach(p => {
     dm[p]  = computeFSMetrics(byPeriod[p]);
-    wbd[p] = getFSWbRow(p);
+    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || []);
   });
   const periodDeals = periods.flatMap(p => byPeriod[p] || []);
   const allDm  = computeFSMetrics(periodDeals);
-  const allWbd = getFSWbAllPeriods(periods);
+  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals);
 
   const N = periods.length, showTotal = N > 1;
 
@@ -5148,6 +5148,62 @@ function buildFSSummaryTables(deals){
   </tbody>`;
 }
 
+// Merges deal-level origination and management-fee data into a QB workbook row.
+// Fixes two KPIs whose denominators never come from the QB P&L:
+//   1. "Expenses as % of Origination Income" — orig_income is 0 in QB when the company
+//      uses a different account name; fall back to deal-level d.origination sum.
+//   2. "Management Fee % of Collections" — mgmt_total_fees, mgmt_coll_total, and the
+//      deal-type breakdown are never set by QB import; compute from deal data.
+function enrichWbRow(row, deals){
+  row = Object.assign({}, row);
+
+  // ── Origination Income fallback ──────────────────────────────────────────
+  if(!row.orig_income){
+    const dealOrig = deals.reduce((a, d) => a + (d.origination || 0), 0);
+    if(dealOrig > 0){
+      row.orig_income = dealOrig;
+      const o = dealOrig;
+      if(row.bank_fees    != null) row.kpi_bankfees_pct_orig = row.bank_fees    / o;
+      if(row.office_exp   != null) row.kpi_office_pct_orig   = row.office_exp   / o;
+      if(row.software_exp != null) row.kpi_software_pct_orig = row.software_exp / o;
+      if(row.prof_fees    != null) row.kpi_proffees_pct_orig = row.prof_fees    / o;
+      if(row.sales_mktg   != null) row.kpi_sales_pct_orig    = row.sales_mktg   / o;
+      if(row.travel       != null) row.kpi_travel_pct_orig   = row.travel       / o;
+      if(row.rent         != null) row.kpi_rent_pct_orig     = row.rent         / o;
+      if(row.total_opex   != null) row.total_exp_pct_orig    = row.total_opex   / o;
+    }
+  }
+
+  // ── Management Fee % of Collections ─────────────────────────────────────
+  const mgmtDeals = deals.filter(d => (d.mgmtFee || 0) > 0);
+  if(mgmtDeals.length > 0){
+    row.mgmt_total_fees = mgmtDeals.reduce((a, d) => a + (d.mgmtFee || 0), 0);
+    row.mgmt_coll_total = mgmtDeals.reduce((a, d) => a + (d.collected || 0), 0);
+    row.mgmt_fee_pct    = row.mgmt_coll_total ? row.mgmt_total_fees / row.mgmt_coll_total : null;
+    // Breakdown by normalized dealType
+    const byType = {};
+    mgmtDeals.forEach(d => {
+      const t = String(d.dealType || 'Other').toLowerCase().replace(/[\s\-]+/g, '');
+      byType[t] = (byType[t] || 0) + (d.collected || 0);
+    });
+    row.mgmt_coll_ach_deal = byType['ach']                  || null;
+    row.mgmt_coll_asset    = byType['assetbacked']          || null;
+    row.mgmt_coll_rev_con  = byType['reverseconsolidation'] || null;
+    row.mgmt_coll_wire     = byType['wire'] || byType['wiretransfer'] || null;
+    row.mgmt_coll_mca      = byType['mca']                  || null;
+    // mgmt_coll_ach is a second ACH row in the workbook — represents a payment-method
+    // sub-bucket we cannot distinguish from deal-type alone; leave null to avoid
+    // double-counting with mgmt_coll_ach_deal.
+    row.mgmt_coll_ach      = null;
+    const knownTypes = new Set(['ach','assetbacked','reverseconsolidation','wire','wiretransfer','mca']);
+    row.mgmt_coll_other = Object.entries(byType)
+      .filter(([t]) => !knownTypes.has(t))
+      .reduce((a, [, v]) => a + v, 0) || null;
+  }
+
+  return row;
+}
+
 function buildKPITab(deals){
   deals = deals || getFilteredDeals();
 
@@ -5199,11 +5255,11 @@ function buildKPITab(deals){
   const dm = {}, wbd = {};
   periods.forEach(p => {
     dm[p]  = computeFSMetrics(byPeriod[p] || []);
-    wbd[p] = getFSWbRow(p);
+    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || []);
   });
   const periodDeals = periods.flatMap(p => byPeriod[p] || []);
   const allDm  = computeFSMetrics(periodDeals);
-  const allWbd = getFSWbAllPeriods(periods);
+  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals);
 
   const N = periods.length, showTotal = N > 1;
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
@@ -5454,8 +5510,8 @@ function buildFSVarianceTables(deals){
   const pLbl = periodLabel(pP, STATE.groupBy);
   if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
 
-  const cW = getFSWbRow(cP);
-  const pW = getFSWbRow(pP);
+  const cW = enrichWbRow(getFSWbRow(cP), byPeriod[cP] || []);
+  const pW = enrichWbRow(getFSWbRow(pP), byPeriod[pP] || []);
   const cD = computeFSMetrics(byPeriod[cP] || []);
   const pD = computeFSMetrics(byPeriod[pP] || []);
 
