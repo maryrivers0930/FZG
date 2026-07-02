@@ -2509,10 +2509,14 @@ function parseSyndPayout(rows, ent, period){
       mgmtFee: 0,
       netPayment: 0,
       remaining: 0,
+      dealType: '',
     };
     byDeal[key].collected += parseNum(colFind(r,'grosscollected','gross collected','totalcollected','total collected','collected')||0);
     byDeal[key].mgmtFee  += parseNum(colFind(r,'managementfee','management fee','mgmtfee','mgmt')||0);
     byDeal[key].netPayment += parseNum(colFind(r,'netpayment','net payment','netpayout')||0);
+    // Parse deal/product type if the payout report includes it
+    byDeal[key].dealType = byDeal[key].dealType ||
+      String(colFind(r,'producttype','product type','dealtype','deal type') || '').trim();
     // Last row's RTR balance is the most recent remaining
     const bal = parseNum(colFind(r,'synrtrbalance','syn rtr balance','rtrbalance')||0);
     if(bal > 0) byDeal[key].remaining = bal;
@@ -2538,7 +2542,7 @@ function parseSyndPayout(rows, ent, period){
     syndicator: d.syndicator,
     iso: 'Direct',
     whiteLabel: 'Standard',
-    dealType: 'MCA',
+    dealType: d.dealType || '',
     status: 'Active',
     mgmtFee: d.mgmtFee,
     netPayout: d.netPayment,
@@ -5190,8 +5194,12 @@ function buildMgmtByPeriod(groupBy){
       const isSyndicationSource = d._srcType === 'sl' || d._srcType === 'sp';
       const isAfWithMgmt        = d._srcType === 'af' && (d.mgmtFee || 0) > 0;
       if(!isSyndicationSource && !isAfWithMgmt) return;
-      // sl deals have fundedDate; sp deals do not — key sp by stored period
-      const dateRef = d.fundedDate || (storedPeriod + '-15');
+      // sl deals: key by storedPeriod (the upload-assigned reporting period), not by
+      // fundedDate — a deal funded in 2022 but in a "2024-01" upload represents 2024-01
+      // activity. sp deals have no fundedDate and already use storedPeriod.
+      const dateRef = d._srcType === 'sl'
+        ? (storedPeriod + '-15')
+        : (d.fundedDate || (storedPeriod + '-15'));
       const pk = periodKey(dateRef, groupBy);
       if(!out[pk]) out[pk] = { sl: [], sp: [], af: [] };
       if(d._srcType === 'sl') out[pk].sl.push(d);
@@ -5249,24 +5257,34 @@ function enrichWbRow(row, deals, mgmtBucket){
     row.mgmt_total_fees = mgmtSrc.reduce((a, d) => a + (d.mgmtFee || 0), 0);
     row.mgmt_coll_total = mgmtSrc.reduce((a, d) => a + (d.collected || 0), 0);
     row.mgmt_fee_pct    = row.mgmt_coll_total ? row.mgmt_total_fees / row.mgmt_coll_total : null;
-    // Breakdown by normalized dealType (productType on sl deals, dealType on sp/af)
+
+    // Build deal type lookup from sl deals (keyed by Lead ID and merchant name) so that
+    // sp deals — which lack a product type column — can inherit the correct deal type.
+    const slTypeById = {};
+    (mb.sl || []).forEach(d => {
+      if(d._dealId) slTypeById[d._dealId] = d.dealType;
+      if(d.merchant) slTypeById[d.merchant] = slTypeById[d.merchant] || d.dealType;
+    });
+
+    // Bucket collections by product type; sp deals look up type from sl when unknown
     const byType = {};
     mgmtSrc.forEach(d => {
-      const t = String(d.dealType || 'Other').toLowerCase().replace(/[\s\-]+/g, '');
+      let type = d.dealType;
+      if(d._srcType === 'sp' && !type){
+        type = slTypeById[d.dealId] || slTypeById[d.merchant] || '';
+      }
+      const t = String(type || 'Other').toLowerCase().replace(/[\s\-]+/g, '');
       byType[t] = (byType[t] || 0) + (d.collected || 0);
     });
-    row.mgmt_coll_ach_deal = byType['ach']                  || null;
-    row.mgmt_coll_asset    = byType['assetbacked']          || null;
-    row.mgmt_coll_rev_con  = byType['reverseconsolidation'] || null;
-    row.mgmt_coll_mca      = byType['mca']                  || null;
-    row.mgmt_coll_wire     = byType['wire'] || byType['wiretransfer'] || null;
+    row.mgmt_coll_ach   = byType['ach']                  || null;
+    row.mgmt_coll_asset = byType['assetbacked']          || null;
+    row.mgmt_coll_rev   = byType['reverseconsolidation'] || null;
+    row.mgmt_coll_mca   = byType['mca']                  || null;
+    row.mgmt_coll_wire  = byType['wire'] || byType['wiretransfer'] || null;
     const knownTypes = new Set(['ach','assetbacked','reverseconsolidation','mca','wire','wiretransfer']);
     row.mgmt_coll_other = Object.entries(byType)
       .filter(([t]) => !knownTypes.has(t))
       .reduce((a, [, v]) => a + v, 0) || null;
-    // mgmt_coll_ach: second "ACH" row — would need a separate payment-method column
-    // that neither sl nor sp currently surfaces; left null to avoid double-counting.
-    row.mgmt_coll_ach = null;
   }
 
   return row;
@@ -5522,16 +5540,15 @@ function buildKPITab(deals){
     ${spacer()}
 
     ${catHdr('Management Fee % of Collections')}
-    ${wRow('Total Collections',               'mgmt_coll_total',    false, true)}
-    ${wRow('ACH',                             'mgmt_coll_ach_deal', false, false)}
-    ${wRow('Asset Backed',                    'mgmt_coll_asset',    false, false)}
-    ${wRow('Reverse Consolidation',           'mgmt_coll_rev_con',  false, false)}
-    ${wRow('ACH',                             'mgmt_coll_ach',      false, false)}
-    ${wRow('Wire transfer',                   'mgmt_coll_wire',     false, false)}
-    ${wRow('Payments from MCA',               'mgmt_coll_mca',      false, false)}
-    ${wRow('Other',                           'mgmt_coll_other',    false, false)}
-    ${wRow('Total Management Fees',           'mgmt_total_fees',    false, true)}
-    ${wRow('Management Fee % of Collections', 'mgmt_fee_pct',       true,  true)}
+    ${wRow('Total Collections',               'mgmt_coll_total', false, true)}
+    ${wRow('ACH',                             'mgmt_coll_ach',   false, false)}
+    ${wRow('Asset Backed',                    'mgmt_coll_asset', false, false)}
+    ${wRow('Reverse Consolidation',           'mgmt_coll_rev',   false, false)}
+    ${wRow('Wire transfer',                   'mgmt_coll_wire',  false, false)}
+    ${wRow('Payments from MCA',               'mgmt_coll_mca',   false, false)}
+    ${wRow('Other',                           'mgmt_coll_other', false, false)}
+    ${wRow('Total Management Fees',           'mgmt_total_fees', false, true)}
+    ${wRow('Management Fee % of Collections', 'mgmt_fee_pct',    true,  true)}
   </tbody>`;
 }
 
@@ -5862,16 +5879,15 @@ function buildFSVarianceTables(deals){
     ${mfVR('Rent Expenses',                  'rent',         false)}
     ${mfVR('Total Expenses as % of Management Fees','total_opex',false,true)}
     ${sHdr('Management Fee % of Collections', true)}
-    ${wVR('Total Collections',              'mgmt_coll_total',   false, true,  true)}
-    ${wVR('ACH Deal Collections',           'mgmt_coll_ach_deal',false, true)}
-    ${wVR('Asset Backed Collections',       'mgmt_coll_asset',   false, true)}
-    ${wVR('Reverse Consolidation Collections','mgmt_coll_rev_con',false,true)}
-    ${wVR('ACH Collections',               'mgmt_coll_ach',      false, true)}
-    ${wVR('Wire Transfer Collections',     'mgmt_coll_wire',     false, true)}
-    ${wVR('Payments from MCA Collections', 'mgmt_coll_mca',      false, true)}
-    ${wVR('Other Collections',             'mgmt_coll_other',    false, true)}
-    ${wVR('Total Management Fees',         'mgmt_total_fees',    false, true,  true)}
-    ${wVR('Management Fee % of Collections','mgmt_fee_pct',       true,  true,  true)}
+    ${wVR('Total Collections',              'mgmt_coll_total', false, true,  true)}
+    ${wVR('ACH Collections',               'mgmt_coll_ach',   false, true)}
+    ${wVR('Asset Backed Collections',      'mgmt_coll_asset', false, true)}
+    ${wVR('Reverse Consolidation Collections','mgmt_coll_rev',false, true)}
+    ${wVR('Wire Transfer Collections',     'mgmt_coll_wire',  false, true)}
+    ${wVR('Payments from MCA Collections', 'mgmt_coll_mca',   false, true)}
+    ${wVR('Other Collections',             'mgmt_coll_other', false, true)}
+    ${wVR('Total Management Fees',         'mgmt_total_fees', false, true,  true)}
+    ${wVR('Management Fee % of Collections','mgmt_fee_pct',    true,  true,  true)}
     </tbody>`;
   }
 
