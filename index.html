@@ -1157,6 +1157,26 @@ function loadState(){
       STATE._fromSharedSnapshot = (!window.__SNAPSHOT__ && !localSrc && !!SNAP_DATA);
       STATE.entities = src.entities || STATE.entities;
       STATE.activeEntityId = src.activeEntityId || STATE.entities[0]?.id;
+      // When loading from the embedded snapshot, merge locally-uploaded non-af deals (sl, sp, ls)
+      // from localStorage so syndication/payout uploads survive the snapshot taking priority.
+      if(window.__SNAPSHOT__ && localSrc && localSrc.entities){
+        STATE.entities.forEach(snapEnt => {
+          const localEnt = (localSrc.entities || []).find(e => e.id === snapEnt.id);
+          if(!localEnt || !localEnt.dealsByPeriod) return;
+          if(!snapEnt.dealsByPeriod) snapEnt.dealsByPeriod = {};
+          Object.entries(localEnt.dealsByPeriod).forEach(([period, deals]) => {
+            const uploads = (deals || []).filter(d => d._srcType !== 'af');
+            if(!uploads.length) return;
+            snapEnt.dealsByPeriod[period] = snapEnt.dealsByPeriod[period] || [];
+            snapEnt.dealsByPeriod[period].push(...uploads);
+          });
+        });
+        // Also merge fsData from localStorage when snapshot doesn't have it
+        if(localSrc.fsData && Object.keys(localSrc.fsData).length > 0 &&
+           (!src.fsData || Object.keys(src.fsData).length === 0)){
+          STATE.fsData = localSrc.fsData;
+        }
+      }
       // fsData: prefer src if non-empty; fall back to SNAP_DATA's fsData so a collaborator
       // with a stale localStorage (entities but no FS data) still sees shared FS metrics.
       if(src.fsData && Object.keys(src.fsData).length > 0){
@@ -1180,9 +1200,8 @@ function loadState(){
           ent.dealsByPeriod[p].push(d);
         });
       });
-      // Only clear localStorage if this was a snapshot HTML load (not a git SNAP_DATA load,
-      // since we want local uploads to persist as overrides above SNAP_DATA)
-      if(window.__SNAPSHOT__) try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      // Do NOT clear localStorage when snapshot is active — user's uploaded sl/sp/ls deals
+      // must persist across page loads so they can be merged with the snapshot af deals above.
     }
   }catch(e){}
 }
