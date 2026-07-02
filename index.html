@@ -409,6 +409,15 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
     <div class="tab" onclick="switchTab('share')">🔗 Share &amp; Sync</div>
   </div>
 
+  <!-- Shared snapshot banner — shown when SNAP_DATA is the data source -->
+  <div id="snapDataBanner" style="display:none;background:rgba(167,139,250,.08);border-bottom:1px solid rgba(167,139,250,.18);padding:7px 16px;font-size:11px;color:var(--purple);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-weight:600">📡 Shared repository snapshot loaded</span>
+    <span id="snapDataBannerDate" style="color:var(--muted)"></span>
+    <span style="color:rgba(139,148,158,.5)">·</span>
+    <span style="color:var(--muted)">Upload new files to work with your own data</span>
+    <span style="margin-left:auto"><a href="#" onclick="switchTab('share');return false" style="color:var(--purple);text-decoration:none;font-weight:600">Sync to Repository →</a></span>
+  </div>
+
   <!-- ===== COVER / DASHBOARD TAB ===== -->
   <div id="tab-cover" class="tab-content">
     <!-- Hero strip -->
@@ -895,31 +904,76 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
   <!-- ===== SHARE & SYNC TAB ===== -->
   <div id="tab-share" class="tab-content">
 
-    <!-- What is this -->
-    <div style="background:linear-gradient(135deg,#1c1f2e,#161b22);border:1px solid var(--purple);border-radius:10px;padding:20px 24px;margin-bottom:16px">
-      <div style="font-size:16px;font-weight:700;color:var(--purple);margin-bottom:6px">🔗 Share &amp; Sync</div>
-      <p style="font-size:12px;color:var(--muted);line-height:1.6">Export your entire dashboard — all entities, all periods of deal data, recovery history, and settings — as a single <b style="color:var(--text)">.pmdata</b> file. Send it by email, Slack, or shared drive. The recipient imports it here and has the full dashboard instantly. No server, no login, no cloud required.</p>
+    <!-- ── REPOSITORY SYNC (primary workflow) ── -->
+    <div class="section" style="border-color:rgba(167,139,250,.35);margin-bottom:16px">
+      <div class="section-hdr" style="margin-bottom:14px">
+        <span class="section-title">🔄 Repository Sync</span>
+        <span class="section-sub">Make your uploaded data available to all collaborators automatically</span>
+      </div>
+
+      <!-- Current shared snapshot status -->
+      <div id="repoSnapStatus" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:11px"></div>
+
+      <!-- 3-step workflow -->
+      <div style="display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0;align-items:start;margin-bottom:16px">
+
+        <!-- Step 1 -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:6px">Step 1</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Export your data</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">After uploading reports, export the full package as a <code style="background:var(--bg);padding:1px 4px;border-radius:3px">.pmdata</code> file.</div>
+          <div id="exportSummary" style="font-size:10px;color:var(--muted);margin-bottom:10px;padding:8px;background:var(--bg);border-radius:5px;border:1px solid var(--border)"></div>
+          <button class="btn btn-purple" style="width:100%" onclick="exportAndSync()">📤 Export for Repository Sync</button>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;padding-top:48px;color:var(--muted);font-size:18px">→</div>
+
+        <!-- Step 2 -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:6px">Step 2</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Give the file to Claude</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.55">Drop the <code style="background:var(--bg);padding:1px 4px;border-radius:3px">.pmdata</code> file into your Claude Code session and say:<br><br>
+            <span style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-family:monospace;font-size:10px;color:var(--text);line-height:1.4">"Sync this file to the shared repository"</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;padding-top:48px;color:var(--muted);font-size:18px">→</div>
+
+        <!-- Step 3 -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:6px">Done</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Everyone sees it instantly</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.55">Claude embeds the data into the project and commits it to the repository. The next time anyone opens this project — in any session, on any computer — the data is pre-loaded automatically.<br><br>
+            <span style="color:var(--muted)">No re-uploading. No file-sharing. Just open and go.</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:10px;color:var(--muted);padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+        <b style="color:var(--text)">To update:</b> upload new reports, export again, tell Claude to sync. The previous snapshot is replaced. &nbsp;·&nbsp;
+        <b style="color:var(--text)">To clear shared data:</b> tell Claude "clear the shared repository snapshot." &nbsp;·&nbsp;
+        <b style="color:var(--text)">Data stays private</b> as long as the repository is private.
+      </div>
     </div>
 
-    <!-- Full state export/import -->
+    <!-- ── EXPORT / IMPORT (manual transfer) ── -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
 
       <!-- EXPORT card -->
       <div class="section" style="margin:0">
-        <div class="section-hdr"><span class="section-title">📤 Export Full Package</span></div>
-        <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Creates a <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">.pmdata</code> file containing all entities, all deal periods, and recovery history. Anyone with Portfolio Metrics can import it.</p>
-        <div id="exportSummary" style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--muted)"><b style="color:var(--text)">FunderZGroup</b> (FZG) — 0 periods · 0 deals · $0 funded · 16 recovery snapshots<br></div>
-        <button class="btn btn-purple" style="width:100%;padding:10px" onclick="exportFullPackage()">⬇ Download Full Package (.pmdata)</button>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportEntityPackage()">Export Active Entity Only</button>
+        <div class="section-hdr"><span class="section-title">📤 Export Package</span><span class="section-sub">Manual transfer between users</span></div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Send a <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">.pmdata</code> file to a colleague by email or Slack. They import it below to load your data locally.</p>
+        <button class="btn btn-ghost" style="width:100%;padding:8px;margin-bottom:6px" onclick="exportFullPackage()">⬇ Download Full Package (.pmdata)</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportEntityPackage()">Active Entity Only</button>
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copyStateToClipboard()">Copy as JSON</button>
         </div>
       </div>
 
       <!-- IMPORT card -->
       <div class="section" style="margin:0">
-        <div class="section-hdr"><span class="section-title">📥 Import Package</span></div>
-        <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Import a <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">.pmdata</code> file received from a colleague. Choose whether to <b style="color:var(--text)">merge</b> (add to existing data) or <b style="color:var(--text)">replace</b> (start fresh from the file).</p>
+        <div class="section-hdr"><span class="section-title">📥 Import Package</span><span class="section-sub">Manual transfer between users</span></div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Import a <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">.pmdata</code> file received from a colleague.</p>
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px">
             <input type="radio" name="importMode" value="merge" checked="" style="accent-color:var(--purple)"> Merge
@@ -939,11 +993,11 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
       </div>
     </div>
 
-    <!-- Snapshot HTML generator -->
-    <div class="section">
+    <!-- ── SHAREABLE DASHBOARD ── -->
+    <div class="section" style="margin-bottom:16px">
       <div class="section-hdr">
         <span class="section-title">📄 Generate Shareable Dashboard</span>
-        <span class="section-sub">Embed all data into a self-contained HTML file</span>
+        <span class="section-sub">Self-contained HTML file for stakeholders</span>
       </div>
       <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Creates a standalone <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">.html</code> file with your data baked in. The recipient double-clicks it and sees the full dashboard — no upload needed. Perfect for sending to stakeholders who just need to view, not edit.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
@@ -952,7 +1006,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
           <div id="snapEntityList" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
         <div>
-          <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Snapshot Options</label>
+          <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Options</label>
           <div style="display:flex;flex-direction:column;gap:6px">
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
               <input type="checkbox" id="snapIncludeDeals" checked="" style="accent-color:var(--purple)"> Include deal-level data
@@ -975,7 +1029,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
         <span class="section-title">📋 Sync History</span>
         <button class="btn btn-ghost btn-sm" onclick="clearSyncLog()">Clear</button>
       </div>
-      <div id="syncLog" style="font-size:11px;color:var(--muted);font-family:monospace;max-height:200px;overflow-y:auto"><div style="padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">6/11/2026, 2:25:07 PM</span> &nbsp;Generated snapshot HTML for: FunderzGroup</div></div>
+      <div id="syncLog" style="font-size:11px;color:var(--muted);font-family:monospace;max-height:200px;overflow-y:auto"></div>
     </div>
 
   </div><!-- end share tab -->
@@ -1057,6 +1111,13 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
 </script>
 <script>
 // ============================================================
+// SHARED REPOSITORY SNAPSHOT
+// This line is updated by Claude when you sync via the Repository Sync workflow.
+// Replace null with the exported .pmdata JSON to pre-load shared data for all users.
+// ============================================================
+const SNAP_DATA = null;
+
+// ============================================================
 // STATE & STORAGE
 // ============================================================
 const LS_KEY = 'portMetrics_v2';
@@ -1075,10 +1136,11 @@ let STATE = {
 
 function loadState(){
   try{
-    const src = window.__SNAPSHOT__
-      ? window.__SNAPSHOT__
-      : (() => { const s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):null; })();
+    const localSrc = (() => { const s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):null; })();
+    // Priority: snapshot HTML > local session > shared git snapshot > empty
+    const src = window.__SNAPSHOT__ || localSrc || SNAP_DATA || null;
     if(src){
+      STATE._fromSharedSnapshot = (!window.__SNAPSHOT__ && !localSrc && !!SNAP_DATA);
       STATE.entities = src.entities || STATE.entities;
       STATE.activeEntityId = src.activeEntityId || STATE.entities[0]?.id;
       if(src.fsData) STATE.fsData = src.fsData;
@@ -1098,7 +1160,9 @@ function loadState(){
           ent.dealsByPeriod[p].push(d);
         });
       });
-      try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      // Only clear localStorage if this was a snapshot HTML load (not a git SNAP_DATA load,
+      // since we want local uploads to persist as overrides above SNAP_DATA)
+      if(window.__SNAPSHOT__) try{ localStorage.removeItem(LS_KEY); }catch(e){}
     }
   }catch(e){}
 }
@@ -1137,6 +1201,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   buildEntityList();
   buildUploadEntityLabel();
   buildAllViews();
+  // Show banner when this session is running from the shared git snapshot
+  if(STATE._fromSharedSnapshot && SNAP_DATA){
+    const banner = document.getElementById('snapDataBanner');
+    const dateEl = document.getElementById('snapDataBannerDate');
+    if(banner){ banner.style.display='flex'; }
+    if(dateEl && SNAP_DATA._syncedAt){
+      dateEl.textContent = 'Synced ' + new Date(SNAP_DATA._syncedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    }
+  }
   document.addEventListener('click', closeAllMs);
 });
 
@@ -6381,6 +6454,40 @@ function buildShareTab(){
   buildExportSummary();
   buildSnapEntityList();
   buildSyncLog();
+  buildRepoSnapStatus();
+}
+
+function buildRepoSnapStatus(){
+  const el = document.getElementById('repoSnapStatus'); if(!el) return;
+  if(SNAP_DATA){
+    const ents = (SNAP_DATA.entities||[]);
+    const totalDeals = ents.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().length,0);
+    const totalFunded = ents.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().reduce((b,d)=>b+d.amount,0),0);
+    const syncedAt = SNAP_DATA._syncedAt ? new Date(SNAP_DATA._syncedAt).toLocaleString() : 'Unknown date';
+    el.innerHTML=`<span style="color:var(--green);font-weight:700">✓ Shared snapshot active</span>
+      <span style="color:rgba(139,148,158,.5);margin:0 8px">·</span>
+      Synced <b style="color:var(--text)">${syncedAt}</b>
+      <span style="color:rgba(139,148,158,.5);margin:0 8px">·</span>
+      ${ents.length} ${ents.length===1?'entity':'entities'}
+      <span style="color:rgba(139,148,158,.5);margin:0 6px">·</span>
+      ${totalDeals.toLocaleString()} deals
+      <span style="color:rgba(139,148,158,.5);margin:0 6px">·</span>
+      ${fmt$(totalFunded)} funded
+      <div style="margin-top:6px;color:var(--muted)">All collaborators opening this project load this dataset automatically. Export and sync again to update it.</div>`;
+  } else {
+    el.innerHTML=`<span style="color:var(--muted)">No shared snapshot committed yet.</span>
+      <span style="color:rgba(139,148,158,.4);margin:0 8px">·</span>
+      <span style="color:var(--muted)">Upload your reports, then follow the 3-step workflow above to share them with everyone.</span>`;
+  }
+}
+
+function exportAndSync(){
+  const pkg = buildPackage(STATE.entities.map(e=>e.id));
+  pkg._syncedAt = new Date().toISOString();
+  const ts = new Date().toISOString().slice(0,10);
+  downloadJSON(pkg, `PortfolioMetrics_Sync_${ts}.pmdata`);
+  logSync('Exported sync package ('+STATE.entities.length+' entities, '+
+    STATE.entities.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().length,0)+' deals) → ready to sync to repository');
 }
 
 function buildExportSummary(){
