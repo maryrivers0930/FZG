@@ -6481,13 +6481,44 @@ function buildRepoSnapStatus(){
   }
 }
 
+// Fields the dashboard actually reads — everything else is dropped to keep the sync file small
+const SNAP_DEAL_FIELDS = [
+  'amount','rtr','collected','remaining','factor','commission','origination','ftf',
+  'merchantBankFee','mgmtFee','discounts','collectionFees',
+  'fundedDate','status','amStatus','iso','whiteLabel','dtype','state',
+  'syndicator','merchant','sicCode','sicIndustry','term',
+  'nonCashColl','payMca','dealId','_srcType','_period'
+];
+function slimDeal(d){
+  const out={};
+  SNAP_DEAL_FIELDS.forEach(k=>{ if(d[k]!=null) out[k]=d[k]; });
+  return out;
+}
 function exportAndSync(){
-  const pkg = buildPackage(STATE.entities.map(e=>e.id));
-  pkg._syncedAt = new Date().toISOString();
+  const totalDeals = STATE.entities.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().length,0);
+  const entities = STATE.entities.map(ent=>({
+    id: ent.id,
+    name: ent.name,
+    code: ent.code,
+    dealsByPeriod: Object.fromEntries(
+      Object.entries(ent.dealsByPeriod||{}).map(([p,arr])=>[p,(arr||[]).map(slimDeal)])
+    ),
+    recoveryHistory: ent.recoveryHistory||[],
+    // uploads intentionally excluded — raw file data is the main size driver
+  }));
+  const pkg = {
+    magic: PACKAGE_MAGIC,
+    version: PACKAGE_VERSION,
+    _syncedAt: new Date().toISOString(),
+    exportedBy: activeEntity().name,
+    fsData: STATE.fsData||{},
+    entities,
+  };
+  const json = JSON.stringify(pkg);
+  const kb = Math.round(json.length/1024);
   const ts = new Date().toISOString().slice(0,10);
   downloadJSON(pkg, `PortfolioMetrics_Sync_${ts}.pmdata`);
-  logSync('Exported sync package ('+STATE.entities.length+' entities, '+
-    STATE.entities.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().length,0)+' deals) → ready to sync to repository');
+  logSync(`Exported slim sync package — ${totalDeals} deals · ${kb} KB → ready to sync to repository`);
 }
 
 function buildExportSummary(){
