@@ -4666,6 +4666,18 @@ function fmtFS(val, isPct){
   return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(val);
 }
 
+// Shared semantic color function — matches Portfolio Performance color rules exactly.
+// type='profit'       : negative → red, positive → green (Net Income, EBITDA, Gross Profit, Growth)
+// type='rec'          : ≥1.0 → green, ≥0.8 → orange, <0.8 → red (Recovery Rate, as decimal)
+// type='default_rate' : >0.15 → red, >0.07 → orange, else neutral (Default Rate, as decimal)
+function colorVal(v, type){
+  if(v == null || v === undefined || (typeof v === 'number' && isNaN(v))) return '';
+  if(type === 'profit')       return v < 0 ? 'var(--red)' : v > 0 ? 'var(--green)' : '';
+  if(type === 'rec')          return v >= 1 ? 'var(--green)' : v >= 0.8 ? 'var(--orange)' : 'var(--red)';
+  if(type === 'default_rate') return v > 0.15 ? 'var(--red)' : v > 0.07 ? 'var(--orange)' : '';
+  return '';
+}
+
 // IS fields that should be summed across periods; BS fields use end-of-period snapshot
 const FS_IS_SUM_FIELDS = ['orig_income','coll_fee_income','monthly_fee_income','comm_fee_income',
   'default_fee_income','mgmt_fee_income','total_income','comm_exp','other_cogs','total_cogs',
@@ -4969,14 +4981,18 @@ function buildFSSummaryTables(deals){
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
 
   // ── Formatting helpers ──────────────────────────────────────────
-  function cell(val, isPct, bold){
+  // colorType: optional semantic color ('profit','rec','default_rate') via shared colorVal()
+  function cell(val, isPct, bold, colorType){
     const missing = val == null || val === undefined || (typeof val==='number' && isNaN(val));
     const disp = missing ? '—'
       : isPct ? (val*100).toFixed(2)+'%'
       : fmtFS(val, false);
+    const semColor = (!missing && !bold && colorType) ? colorVal(val, colorType) : '';
     const s = bold
       ? 'text-align:right;font-weight:700;color:var(--blue)'
-      : missing ? 'text-align:right;color:var(--muted)' : 'text-align:right';
+      : missing ? 'text-align:right;color:var(--muted)'
+      : semColor ? `text-align:right;color:${semColor}`
+      : 'text-align:right';
     return `<td style="${s}">${disp}</td>`;
   }
 
@@ -4991,64 +5007,64 @@ function buildFSSummaryTables(deals){
   }
 
   // Data row sourced from workbook (static QB data)
-  function wRow(label, field, isPct, bold){
+  function wRow(label, field, isPct, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding-left:8px'
       : 'padding-left:20px;color:var(--muted)';
     const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
-    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold)).join('');
-    const tot   = showTotal ? cell(allWbd[field], isPct, bold) : '';
+    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold, colorType)).join('');
+    const tot   = showTotal ? cell(allWbd[field], isPct, bold, colorType) : '';
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
   // Data row sourced from deal data (respects filters).
   // Shows '—' for periods that have FS data but no deals — a zero from an empty
   // period is not the same as a zero computed from actual deal activity.
-  function dRow(label, key, isPct, bold){
+  function dRow(label, key, isPct, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding-left:8px'
       : 'padding-left:20px;color:var(--muted)';
     const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
     const cells = periods.map(p => {
       const val = (byPeriod[p]||[]).length ? dm[p][key] : null;
-      return cell(val, isPct, bold);
+      return cell(val, isPct, bold, colorType);
     }).join('');
-    const tot = showTotal ? cell(periodDeals.length ? allDm[key] : null, isPct, bold) : '';
+    const tot = showTotal ? cell(periodDeals.length ? allDm[key] : null, isPct, bold, colorType) : '';
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
   // KPI ratio row: numerator from QB data, denominator from deal metrics (funded or collected)
   // This handles all "X as % of Funded/Collections" rows where the dollar amount comes from
   // the uploaded P&L but the denominator (funded volume, total collections) comes from deal data.
-  function kRow(label, wbdNum, dmDenom, bold){
+  function kRow(label, wbdNum, dmDenom, bold, colorType){
     const lStyle = bold ? 'font-weight:700;padding-left:8px' : 'padding-left:20px;color:var(--muted)';
     const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
     const cells = periods.map(p => {
       const num = (wbd[p]||{})[wbdNum];
       const den = (dm[p]||{})[dmDenom];
-      return cell(num != null && den ? num / den : null, true, bold);
+      return cell(num != null && den ? num / den : null, true, bold, colorType);
     }).join('');
     const tot = showTotal ? (()=>{
       const num = allWbd[wbdNum];
       const den = allDm[dmDenom];
-      return cell(num != null && den ? num / den : null, true, bold);
+      return cell(num != null && den ? num / den : null, true, bold, colorType);
     })() : '';
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
 
   // Fallback row: workbook data for periods that have it, deal-computed data otherwise
-  function fRow(label, wbdField, dmKey, isPct, bold){
+  function fRow(label, wbdField, dmKey, isPct, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding-left:8px'
       : 'padding-left:20px;color:var(--muted)';
     const bg = bold ? ' style="background:rgba(88,166,255,.06)"' : '';
     const cells = periods.map(p => {
       const wb = (wbd[p]||{})[wbdField];
-      return cell(wb != null ? wb : (dm[p]||{})[dmKey], isPct, bold);
+      return cell(wb != null ? wb : (dm[p]||{})[dmKey], isPct, bold, colorType);
     }).join('');
     const tot = showTotal ? (() => {
       const wb = allWbd[wbdField];
-      return cell(wb != null ? wb : allDm[dmKey], isPct, bold);
+      return cell(wb != null ? wb : allDm[dmKey], isPct, bold, colorType);
     })() : '';
     return `<tr${bg}><td style="${lStyle}">${label}</td>${cells}${tot}</tr>`;
   }
@@ -5104,8 +5120,8 @@ function buildFSSummaryTables(deals){
     ${fRow('Commission Expenses',                'comm_exp',         'commission',  false, false)}
     ${wRow('Other Cost of Goods Sold',           'other_cogs',                      false, false)}
     ${fRow('Total Cost of Goods Sold',           'total_cogs',       'totalCogs',   false, true)}
-    ${fRow('Gross Profit',                       'gross_profit',     'grossProfit', false, true)}
-    ${fRow('Gross Margin %',                     'gross_margin_pct', 'grossMargin', true,  false)}
+    ${fRow('Gross Profit',                       'gross_profit',     'grossProfit', false, true,  'profit')}
+    ${fRow('Gross Margin %',                     'gross_margin_pct', 'grossMargin', true,  false, 'profit')}
     ${sHdr('Operating Expenses', true)}
     ${fRow('Bank Fees & Service Charges',        'bank_fees',        'bankFee',     false, false)}
     ${wRow('Office Expenses',                    'office_exp',                      false, false)}
@@ -5119,16 +5135,16 @@ function buildFSSummaryTables(deals){
     ${wRow('Rent Expenses',                      'rent',                            false, false)}
     ${fRow('Total for Expenses',                 'total_opex',       'totalOpex',   false, true)}
     ${fRow('Expenses % of Revenue',              'exp_pct_rev',      'bankPctFunded',true, false)}
-    ${fRow('EBITDA',                             'ebitda',           'ebitda',      false, true)}
+    ${fRow('EBITDA',                             'ebitda',           'ebitda',      false, true,  'profit')}
     ${wRow('Other Income',                       'other_income',                    false, false)}
     ${wRow('Other Expenses',                     'other_exp',                       false, false)}
     ${wRow('Research and Development',           'rd_exp',                          false, false)}
     ${wRow('Interest Expense',                   'interest_exp',                    false, false)}
     ${wRow('Depreciation',                       'depreciation',                    false, false)}
     ${wRow('Taxes',                              'taxes',                           false, false)}
-    ${fRow('Net Income',                         'net_income',       'netIncome',   false, true)}
-    ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',    true,  false)}
-    ${wRow('Growth',                             'growth',                          true,  false)}
+    ${fRow('Net Income',                         'net_income',       'netIncome',   false, true,  'profit')}
+    ${fRow('Net Income % of Revenue',            'net_income_pct',   'niPctRev',    true,  false, 'profit')}
+    ${wRow('Growth',                             'growth',                          true,  false, 'profit')}
   </tbody>`;
 }
 
@@ -5195,14 +5211,17 @@ function buildKPITab(deals){
   const COLS = N + 1 + (showTotal ? 1 : 0);
 
   // Data cell — right-aligned, bold+blue for totals, muted for missing
-  function cell(val, isPct, bold){
+  function cell(val, isPct, bold, colorType){
     const missing = val == null || val === undefined || (typeof val==='number' && isNaN(val));
     const disp = missing ? '—'
       : isPct ? (val*100).toFixed(2)+'%'
       : fmtFS(val, false);
+    const semColor = (!missing && !bold && colorType) ? colorVal(val, colorType) : '';
     const s = bold
       ? 'text-align:right;font-weight:700;color:var(--blue)'
-      : missing ? 'text-align:right;color:var(--muted)' : 'text-align:right';
+      : missing ? 'text-align:right;color:var(--muted)'
+      : semColor ? `text-align:right;color:${semColor}`
+      : 'text-align:right';
     return `<td style="${s}">${disp}</td>`;
   }
 
@@ -5248,39 +5267,39 @@ function buildKPITab(deals){
   function _metricCells(cells, tot){ return cells + (showTotal ? tot : ''); }
 
   // Metric using a pre-stored wbd field
-  function wRow(label, field, isPct, bold){
+  function wRow(label, field, isPct, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding:3px 16px 3px 24px;font-size:12px'
       : 'padding:3px 16px 3px 40px;color:var(--muted);font-size:12px';
     const bg = bold ? ' style="background:rgba(88,166,255,.04)"' : '';
-    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold)).join('');
-    return `<tr${bg}><td style="${lStyle}">${label}</td>${_metricCells(cells, cell(allWbd[field], isPct, bold))}</tr>`;
+    const cells = periods.map(p => cell((wbd[p]||{})[field], isPct, bold, colorType)).join('');
+    return `<tr${bg}><td style="${lStyle}">${label}</td>${_metricCells(cells, cell(allWbd[field], isPct, bold, colorType))}</tr>`;
   }
 
   // Metric: QB dollar numerator (wbd) / deal-computed denominator (dm)
-  function kRow(label, wbdNum, dmDenom, bold){
+  function kRow(label, wbdNum, dmDenom, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding:3px 16px 3px 24px;font-size:12px'
       : 'padding:3px 16px 3px 40px;color:var(--muted);font-size:12px';
     const bg = bold ? ' style="background:rgba(88,166,255,.04)"' : '';
     const cells = periods.map(p => {
       const num = (wbd[p]||{})[wbdNum], den = (dm[p]||{})[dmDenom];
-      return cell(num != null && den ? num / den : null, true, bold);
+      return cell(num != null && den ? num / den : null, true, bold, colorType);
     }).join('');
-    const tot = (()=>{ const num=allWbd[wbdNum], den=allDm[dmDenom]; return cell(num!=null&&den?num/den:null,true,bold); })();
+    const tot = (()=>{ const num=allWbd[wbdNum], den=allDm[dmDenom]; return cell(num!=null&&den?num/den:null,true,bold,colorType); })();
     return `<tr${bg}><td style="${lStyle}">${label}</td>${_metricCells(cells, tot)}</tr>`;
   }
 
   // Metric: both numerator and denominator from QB wbd
-  function cRow(label, numField, denField, bold){
+  function cRow(label, numField, denField, bold, colorType){
     const lStyle = bold
       ? 'font-weight:700;padding:3px 16px 3px 24px;font-size:12px'
       : 'padding:3px 16px 3px 40px;color:var(--muted);font-size:12px';
     const bg = bold ? ' style="background:rgba(88,166,255,.04)"' : '';
     const cells = periods.map(p => {
-      const w = wbd[p]||{}; return cell(w[denField]?(w[numField]||0)/w[denField]:null, true, bold);
+      const w = wbd[p]||{}; return cell(w[denField]?(w[numField]||0)/w[denField]:null, true, bold, colorType);
     }).join('');
-    const tot = (()=>{ return cell(allWbd[denField]?(allWbd[numField]||0)/allWbd[denField]:null,true,bold); })();
+    const tot = (()=>{ return cell(allWbd[denField]?(allWbd[numField]||0)/allWbd[denField]:null,true,bold,colorType); })();
     return `<tr${bg}><td style="${lStyle}">${label}</td>${_metricCells(cells, tot)}</tr>`;
   }
 
@@ -5330,7 +5349,7 @@ function buildKPITab(deals){
     ${kRow('Transportation and Travel',           'travel',       'funded', false)}
     ${kRow('Rent Expenses',                       'rent',         'funded', false)}
     ${kRow('Total Expenses as % of Funded Amount','total_opex',   'funded', true)}
-    ${kRow('Net Income as % of Funded Amount',    'net_income',   'funded', true)}
+    ${kRow('Net Income as % of Funded Amount',    'net_income',   'funded', true, 'profit')}
     ${spacer()}
 
     ${catHdr('Expenses as % of Origination Income')}
@@ -5496,7 +5515,7 @@ function buildFSVarianceTables(deals){
   }
 
   // ── Core variance row ─────────────────────────────────────────────
-  function varRow(label, cv, pv, isPct, higherBetter, bold, fmtFn){
+  function varRow(label, cv, pv, isPct, higherBetter, bold, fmtFn, colorType){
     const allNull = cv == null && pv == null;
     const pl  = bold ? '8' : '20';
     const wt  = bold ? 'font-weight:700;' : '';
@@ -5511,9 +5530,10 @@ function buildFSVarianceTables(deals){
     const diffStr = isPct ? (diff>=0?'+':'')+((diff)*100).toFixed(2)+'%'
                           : (fmtFn ? (diff>=0?'+':'')+fmtFn(diff) : fmtFS(diff,false));
     const pctStr  = pv ? (Math.abs(pct)*100).toFixed(1)+'%' : 'N/A';
+    const cvColor = colorType ? colorVal(cv, colorType) : 'var(--blue)';
     return `<tr style="${bg}">
       <td style="${wt}padding-left:${pl}px">${label}</td>
-      <td style="text-align:right;${wt}color:var(--blue)">${fmt(cv)}</td>
+      <td style="text-align:right;${wt}color:${cvColor}">${fmt(cv)}</td>
       <td style="text-align:right;color:var(--muted)">${fmt(pv)}</td>
       <td style="text-align:right">${diffStr}</td>
       <td class="${dir}" style="text-align:right">${arrow} ${pctStr}</td>
@@ -5521,34 +5541,34 @@ function buildFSVarianceTables(deals){
   }
 
   // Row factory helpers
-  function wVR(label, field, isPct, higher, bold){
-    return varRow(label, cW[field]??null, pW[field]??null, isPct, higher, bold);
+  function wVR(label, field, isPct, higher, bold, colorType){
+    return varRow(label, cW[field]??null, pW[field]??null, isPct, higher, bold, null, colorType);
   }
-  function dVR(label, key, isPct, higher, bold){
-    return varRow(label, cD[key]??null, pD[key]??null, isPct, higher, bold);
+  function dVR(label, key, isPct, higher, bold, colorType){
+    return varRow(label, cD[key]??null, pD[key]??null, isPct, higher, bold, null, colorType);
   }
   function pVR(label, key, isPct, higher, bold, fmtFn){
     return varRow(label, cPM[key]??null, pPM[key]??null, isPct, higher, bold, fmtFn);
   }
-  function cVR(label, numF, denF, higher, bold){
+  function cVR(label, numF, denF, higher, bold, colorType){
     const cv = cW[denF] ? (cW[numF]||0)/cW[denF] : null;
     const pv = pW[denF] ? (pW[numF]||0)/pW[denF] : null;
-    return varRow(label, cv, pv, true, higher, bold);
+    return varRow(label, cv, pv, true, higher, bold, null, colorType);
   }
-  function mfVR(label, numF, higher, bold){
+  function mfVR(label, numF, higher, bold, colorType){
     const cv = cW.mgmt_fee_income ? (cW[numF]||0)/cW.mgmt_fee_income : null;
     const pv = pW.mgmt_fee_income ? (pW[numF]||0)/pW.mgmt_fee_income : null;
-    return varRow(label, cv, pv, true, higher, bold);
+    return varRow(label, cv, pv, true, higher, bold, null, colorType);
   }
-  function fVR(label, wbdField, cdKey, isPct, higher, bold){
+  function fVR(label, wbdField, cdKey, isPct, higher, bold, colorType){
     const cv = cW[wbdField] != null ? cW[wbdField] : cD[cdKey] ?? null;
     const pv = pW[wbdField] != null ? pW[wbdField] : pD[cdKey] ?? null;
-    return varRow(label, cv, pv, isPct, higher, bold);
+    return varRow(label, cv, pv, isPct, higher, bold, null, colorType);
   }
-  function kVR(label, wbdNum, pmDenom, higher, bold){
+  function kVR(label, wbdNum, pmDenom, higher, bold, colorType){
     const cv = cW[wbdNum] != null && cPM[pmDenom] ? cW[wbdNum] / cPM[pmDenom] : null;
     const pv = pW[wbdNum] != null && pPM[pmDenom] ? pW[wbdNum] / pPM[pmDenom] : null;
-    return varRow(label, cv, pv, true, higher, bold);
+    return varRow(label, cv, pv, true, higher, bold, null, colorType);
   }
 
   const fmtCount = v => Math.round(v).toString();
@@ -5615,8 +5635,8 @@ function buildFSVarianceTables(deals){
     ${wVR('Commission Expenses',           'comm_exp',          false, false)}
     ${wVR('Other Cost of Goods Sold',      'other_cogs',        false, false)}
     ${fVR('Total Cost of Goods Sold',      'total_cogs',        'totalCogs',   false, false, true)}
-    ${fVR('Gross Profit',                  'gross_profit',      'grossProfit', false, true,  true)}
-    ${fVR('Gross Margin %',                'gross_margin_pct',  'grossMargin', true,  true)}
+    ${fVR('Gross Profit',                  'gross_profit',      'grossProfit', false, true,  true, 'profit')}
+    ${fVR('Gross Margin %',                'gross_margin_pct',  'grossMargin', true,  true,  false, 'profit')}
     ${sHdr('Operating Expenses', true)}
     ${dVR('Bank Fees & Service Charges',   'bankFee',           false, false)}
     ${wVR('Office Expenses',               'office_exp',        false, false)}
@@ -5630,16 +5650,16 @@ function buildFSVarianceTables(deals){
     ${wVR('Rent Expenses',                 'rent',              false, false)}
     ${wVR('Total for Expenses',            'total_opex',        false, false, true)}
     ${wVR('Expenses % of Revenue',         'exp_pct_rev',       true,  false)}
-    ${fVR('EBITDA',                        'ebitda',            'ebitda',      false, true,  true)}
+    ${fVR('EBITDA',                        'ebitda',            'ebitda',      false, true,  true, 'profit')}
     ${wVR('Other Income',                  'other_income',      false, true)}
     ${wVR('Other Expenses',                'other_exp',         false, false)}
     ${wVR('Research and Development',      'rd_exp',            false, false)}
     ${wVR('Interest Expense',              'interest_exp',      false, false)}
     ${wVR('Depreciation',                  'depreciation',      false, false)}
     ${wVR('Taxes',                         'taxes',             false, false)}
-    ${fVR('Net Income',                    'net_income',        'netIncome',   false, true,  true)}
-    ${fVR('Net Income % of Revenue',       'net_income_pct',    'niPctRev',    true,  true)}
-    ${wVR('Growth',                        'growth',            true,  true)}
+    ${fVR('Net Income',                    'net_income',        'netIncome',   false, true,  true, 'profit')}
+    ${fVR('Net Income % of Revenue',       'net_income_pct',    'niPctRev',    true,  true,  false, 'profit')}
+    ${wVR('Growth',                        'growth',            true,  true,  false, 'profit')}
     </tbody>`;
   }
 
@@ -5676,7 +5696,7 @@ function buildFSVarianceTables(deals){
     ${kVR('Transportation and Travel',       'travel',             'funded',    false)}
     ${kVR('Rent Expenses',                   'rent',               'funded',    false)}
     ${kVR('Total Expenses as % of Funded Amount','total_opex',     'funded',    false, true)}
-    ${kVR('Net Income as % of Funded Amount','net_income',         'funded',    true,  true)}
+    ${kVR('Net Income as % of Funded Amount','net_income',         'funded',    true,  true, 'profit')}
     ${sHdr('Expenses as % of Origination Income', true)}
     ${wVR('Bank fees & service charges',     'kpi_bankfees_pct_orig',  true, false)}
     ${wVR('Office Expenses',                 'kpi_office_pct_orig',    true, false)}
