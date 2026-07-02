@@ -610,6 +610,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
           <span class="section-title">FS Summary</span>
           <span class="section-sub" id="fsSummarySub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
         </div>
+        <div id="fsSummaryFsWarning" style="display:none;background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.25);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--yellow);margin-bottom:12px"></div>
         <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="fsSummaryTable"></table></div>
       </div>
     </div>
@@ -623,6 +624,7 @@ table.data-tbl tr.total-row td{background:var(--surface2);font-weight:700;color:
           <span class="section-title">Key Performance Indicators (KPIs)</span>
           <span class="section-sub" id="kpiSub" style="margin-left:8px;font-size:11px;color:var(--muted)"></span>
         </div>
+        <div id="kpiFsWarning" style="display:none;background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.25);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--yellow);margin-bottom:12px"></div>
         <div class="tbl-wrap" style="overflow-x:auto"><table class="data-tbl" id="kpiTable"></table></div>
       </div>
     </div>
@@ -1143,7 +1145,13 @@ function loadState(){
       STATE._fromSharedSnapshot = (!window.__SNAPSHOT__ && !localSrc && !!SNAP_DATA);
       STATE.entities = src.entities || STATE.entities;
       STATE.activeEntityId = src.activeEntityId || STATE.entities[0]?.id;
-      if(src.fsData) STATE.fsData = src.fsData;
+      // fsData: prefer src if non-empty; fall back to SNAP_DATA's fsData so a collaborator
+      // with a stale localStorage (entities but no FS data) still sees shared FS metrics.
+      if(src.fsData && Object.keys(src.fsData).length > 0){
+        STATE.fsData = src.fsData;
+      } else if(SNAP_DATA && SNAP_DATA.fsData && Object.keys(SNAP_DATA.fsData).length > 0){
+        STATE.fsData = SNAP_DATA.fsData;
+      }
       // Remap any deals stuck under '__auto__' period key to their correct YYYY-MM period
       STATE.entities.forEach(ent => {
         if(!ent.dealsByPeriod || !ent.dealsByPeriod['__auto__']) return;
@@ -4905,6 +4913,19 @@ function buildFSSummaryTables(deals){
     return;
   }
 
+  // Warn if no FS data covers the current filter periods
+  { const fsYears = new Set(Object.keys(STATE.fsData).map(k => k.slice(0,4)));
+    const dealYears = new Set(periods.map(p => p.slice(0,4)));
+    const missingFsYears = [...dealYears].filter(y => !fsYears.has(y));
+    const warn = document.getElementById('fsSummaryFsWarning');
+    if(warn){
+      if(missingFsYears.length){
+        warn.style.display = '';
+        warn.textContent = `⚠ No financial statement data found for ${missingFsYears.join(', ')}. Upload QuickBooks P&L exports in the Data Upload tab, then re-export via Share & Sync.`;
+      } else { warn.style.display = 'none'; }
+    }
+  }
+
   // Deal-computed metrics per period (respects all filters, capped to displayed periods)
   const dm = {}, wbd = {};
   periods.forEach(p => {
@@ -5131,6 +5152,20 @@ function buildKPITab(deals){
   if(!periods.length){
     tbl.innerHTML = '<tbody><tr><td style="color:var(--muted);padding:20px;text-align:center">No data for current filters</td></tr></tbody>';
     return;
+  }
+
+  // Warn if no FS data covers the current filter periods — metrics will show "—"
+  const fsYears = new Set(Object.keys(STATE.fsData).map(k => k.slice(0,4)));
+  const dealYears = new Set(periods.map(p => p.slice(0,4)));
+  const missingFsYears = [...dealYears].filter(y => !fsYears.has(y));
+  const kpiFsWarning = document.getElementById('kpiFsWarning');
+  if(kpiFsWarning){
+    if(missingFsYears.length){
+      kpiFsWarning.style.display = '';
+      kpiFsWarning.textContent = `⚠ No financial statement data found for ${missingFsYears.join(', ')}. KPI metrics will show "—" for those periods. Upload QuickBooks P&L exports in the Data Upload tab, then re-export via Share & Sync.`;
+    } else {
+      kpiFsWarning.style.display = 'none';
+    }
   }
 
   const dm = {}, wbd = {};
