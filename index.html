@@ -1176,18 +1176,14 @@ function activeEntity(){ return getEntity(STATE.activeEntityId); }
 // INIT
 // ============================================================
 loadState();
-document.addEventListener('DOMContentLoaded', ()=>{
-  // Migrate old format: if entity has .deals[] but no .dealsByPeriod, migrate
+function migrateState(){
   STATE.entities.forEach(ent=>{
     if(!ent.dealsByPeriod) ent.dealsByPeriod = {};
     if(ent.deals && ent.deals.length && Object.keys(ent.dealsByPeriod).length===0){
       ent.dealsByPeriod['migrated'] = ent.deals;
     }
     delete ent.deals;
-    // Ensure recoveryHistory is always an array (old SNAP versions stored it as object)
     if(!Array.isArray(ent.recoveryHistory)) ent.recoveryHistory = [];
-    // Back-fill sicIndustry from sicCode for deals saved before this field was derived
-    // Back-fill numeric fields absent from older SNAP versions so accumulators get 0 not NaN
     Object.values(ent.dealsByPeriod||{}).forEach(arr=>(arr||[]).forEach(d=>{
       if(!d.sicIndustry && d.sicCode) d.sicIndustry = sicCodeToIndustry(d.sicCode);
       if(d.merchantBankFee == null) d.merchantBankFee = 0;
@@ -1196,20 +1192,47 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if(d.mgmtFee        == null) d.mgmtFee         = 0;
     }));
   });
+}
 
+function applySharedSnap(snap){
+  STATE.entities = snap.entities || STATE.entities;
+  STATE.activeEntityId = snap.activeEntityId || STATE.entities[0]?.id;
+  if(snap.fsData) STATE.fsData = snap.fsData;
+  STATE._fromSharedSnapshot = true;
+  STATE._snapSyncedAt = snap._syncedAt || null;
+  migrateState();
+}
+
+function showSnapBanner(syncedAt){
+  const banner = document.getElementById('snapDataBanner');
+  const dateEl = document.getElementById('snapDataBannerDate');
+  if(banner) banner.style.display='flex';
+  if(dateEl && syncedAt)
+    dateEl.textContent = 'Synced ' + new Date(syncedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  // If no local session data and no inline SNAP_DATA, try fetching shared snap from repo
+  const hasLocal = !!localStorage.getItem(LS_KEY);
+  const hasInline = !!(window.__SNAPSHOT__ || SNAP_DATA);
+  if(!hasLocal && !hasInline){
+    try{
+      const r = await fetch('snap_data.json');
+      if(r.ok){
+        const snap = await r.json();
+        if(snap && snap.magic === PACKAGE_MAGIC){
+          applySharedSnap(snap);
+        }
+      }
+    }catch(e){ /* not served from a server, or no snap file — silent */ }
+  }
+
+  migrateState();
   buildEntitySel();
   buildEntityList();
   buildUploadEntityLabel();
   buildAllViews();
-  // Show banner when this session is running from the shared git snapshot
-  if(STATE._fromSharedSnapshot && SNAP_DATA){
-    const banner = document.getElementById('snapDataBanner');
-    const dateEl = document.getElementById('snapDataBannerDate');
-    if(banner){ banner.style.display='flex'; }
-    if(dateEl && SNAP_DATA._syncedAt){
-      dateEl.textContent = 'Synced ' + new Date(SNAP_DATA._syncedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-    }
-  }
+  if(STATE._fromSharedSnapshot) showSnapBanner(STATE._snapSyncedAt);
   document.addEventListener('click', closeAllMs);
 });
 
@@ -6459,11 +6482,11 @@ function buildShareTab(){
 
 function buildRepoSnapStatus(){
   const el = document.getElementById('repoSnapStatus'); if(!el) return;
-  if(SNAP_DATA){
-    const ents = (SNAP_DATA.entities||[]);
+  if(STATE._fromSharedSnapshot){
+    const ents = STATE.entities;
     const totalDeals = ents.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().length,0);
     const totalFunded = ents.reduce((a,e)=>a+Object.values(e.dealsByPeriod||{}).flat().reduce((b,d)=>b+d.amount,0),0);
-    const syncedAt = SNAP_DATA._syncedAt ? new Date(SNAP_DATA._syncedAt).toLocaleString() : 'Unknown date';
+    const syncedAt = STATE._snapSyncedAt ? new Date(STATE._snapSyncedAt).toLocaleString() : 'Unknown date';
     el.innerHTML=`<span style="color:var(--green);font-weight:700">✓ Shared snapshot active</span>
       <span style="color:rgba(139,148,158,.5);margin:0 8px">·</span>
       Synced <b style="color:var(--text)">${syncedAt}</b>
