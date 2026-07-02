@@ -4951,14 +4951,22 @@ function buildFSSummaryTables(deals){
   }
 
   // Deal-computed metrics per period (respects all filters, capped to displayed periods)
+  const mgmtByPeriod = buildMgmtByPeriod(STATE.groupBy);
   const dm = {}, wbd = {};
   periods.forEach(p => {
     dm[p]  = computeFSMetrics(byPeriod[p]);
-    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || []);
+    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || [], mgmtByPeriod[p]);
   });
   const periodDeals = periods.flatMap(p => byPeriod[p] || []);
   const allDm  = computeFSMetrics(periodDeals);
-  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals);
+  const allMgmtBucket = { sl: [], sp: [], af: [] };
+  periods.forEach(p => {
+    const mb = mgmtByPeriod[p] || {};
+    (mb.sl||[]).forEach(d => allMgmtBucket.sl.push(d));
+    (mb.sp||[]).forEach(d => allMgmtBucket.sp.push(d));
+    (mb.af||[]).forEach(d => allMgmtBucket.af.push(d));
+  });
+  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals, allMgmtBucket);
 
   const N = periods.length, showTotal = N > 1;
 
@@ -5148,13 +5156,48 @@ function buildFSSummaryTables(deals){
   </tbody>`;
 }
 
+// Build a period → deal[] map for management-fee computation using ALL entity deals.
+// Priority: sl (Syndication Report) and sp (Payout Report) deals, whose `collected`
+// field is the syndicator's actual cash collections — the correct denominator for
+// "Management Fee % of Collections". Falls back to af deals with mgmtFee > 0 only
+// when no sl/sp data exists for a period.
+// sp deals have fundedDate:'', so we key them by their stored _period instead.
+function buildMgmtByPeriod(groupBy){
+  const ent = activeEntity();
+  if(!ent || !ent.dealsByPeriod) return {};
+  const out = {};
+  Object.entries(ent.dealsByPeriod).forEach(([storedPeriod, pDeals]) => {
+    pDeals.forEach(d => {
+      const isSyndicationSource = d._srcType === 'sl' || d._srcType === 'sp';
+      const isAfWithMgmt        = d._srcType === 'af' && (d.mgmtFee || 0) > 0;
+      if(!isSyndicationSource && !isAfWithMgmt) return;
+      // sl deals have fundedDate; sp deals do not — key sp by stored period
+      const dateRef = d.fundedDate || (storedPeriod + '-15');
+      const pk = periodKey(dateRef, groupBy);
+      if(!out[pk]) out[pk] = { sl: [], sp: [], af: [] };
+      if(d._srcType === 'sl') out[pk].sl.push(d);
+      else if(d._srcType === 'sp') out[pk].sp.push(d);
+      else out[pk].af.push(d);
+    });
+  });
+  return out;
+}
+
 // Merges deal-level origination and management-fee data into a QB workbook row.
-// Fixes two KPIs whose denominators never come from the QB P&L:
-//   1. "Expenses as % of Origination Income" — orig_income is 0 in QB when the company
-//      uses a different account name; fall back to deal-level d.origination sum.
-//   2. "Management Fee % of Collections" — mgmt_total_fees, mgmt_coll_total, and the
-//      deal-type breakdown are never set by QB import; compute from deal data.
-function enrichWbRow(row, deals){
+// `deals`      — af/ls deals for the period (for origination income fallback).
+// `mgmtBucket` — {sl:[], sp:[], af:[]} from buildMgmtByPeriod for this period.
+//
+// Bug 1 fix — "Expenses as % of Origination Income":
+//   orig_income is 0 in QB when the company uses a different account name.
+//   Falls back to Σ(d.origination) from Advance Funded Report deals.
+//
+// Bug 2 fix — "Management Fee % of Collections":
+//   mgmt_total_fees, mgmt_coll_total, and breakdown fields were never set by QB
+//   import. Correct source is sl (Syndication Report) or sp (Payout Report) deals
+//   where d.collected is the SYNDICATOR'S cash collections — the right denominator.
+//   af deals with mgmtFee > 0 use total MERCHANT collections, which is wrong, so
+//   they are only used as a fallback when no sl/sp data exists.
+function enrichWbRow(row, deals, mgmtBucket){
   row = Object.assign({}, row);
 
   // ── Origination Income fallback ──────────────────────────────────────────
@@ -5175,30 +5218,36 @@ function enrichWbRow(row, deals){
   }
 
   // ── Management Fee % of Collections ─────────────────────────────────────
-  const mgmtDeals = deals.filter(d => (d.mgmtFee || 0) > 0);
-  if(mgmtDeals.length > 0){
-    row.mgmt_total_fees = mgmtDeals.reduce((a, d) => a + (d.mgmtFee || 0), 0);
-    row.mgmt_coll_total = mgmtDeals.reduce((a, d) => a + (d.collected || 0), 0);
+  // Preferred source: sl (Syndication Report) or sp (Payout Report) — their
+  // `collected` field is the syndicator's cash collections, the correct denominator.
+  // Fallback: af deals with mgmtFee > 0 (collected = total merchant repayments,
+  // a looser approximation).
+  const mb = mgmtBucket || {};
+  const slSp = [...(mb.sl || []), ...(mb.sp || [])];
+  const mgmtSrc = slSp.length > 0 ? slSp : (mb.af || []).filter(d => (d.mgmtFee || 0) > 0);
+
+  if(mgmtSrc.length > 0){
+    row.mgmt_total_fees = mgmtSrc.reduce((a, d) => a + (d.mgmtFee || 0), 0);
+    row.mgmt_coll_total = mgmtSrc.reduce((a, d) => a + (d.collected || 0), 0);
     row.mgmt_fee_pct    = row.mgmt_coll_total ? row.mgmt_total_fees / row.mgmt_coll_total : null;
-    // Breakdown by normalized dealType
+    // Breakdown by normalized dealType (productType on sl deals, dealType on sp/af)
     const byType = {};
-    mgmtDeals.forEach(d => {
+    mgmtSrc.forEach(d => {
       const t = String(d.dealType || 'Other').toLowerCase().replace(/[\s\-]+/g, '');
       byType[t] = (byType[t] || 0) + (d.collected || 0);
     });
     row.mgmt_coll_ach_deal = byType['ach']                  || null;
     row.mgmt_coll_asset    = byType['assetbacked']          || null;
     row.mgmt_coll_rev_con  = byType['reverseconsolidation'] || null;
-    row.mgmt_coll_wire     = byType['wire'] || byType['wiretransfer'] || null;
     row.mgmt_coll_mca      = byType['mca']                  || null;
-    // mgmt_coll_ach is a second ACH row in the workbook — represents a payment-method
-    // sub-bucket we cannot distinguish from deal-type alone; leave null to avoid
-    // double-counting with mgmt_coll_ach_deal.
-    row.mgmt_coll_ach      = null;
-    const knownTypes = new Set(['ach','assetbacked','reverseconsolidation','wire','wiretransfer','mca']);
+    row.mgmt_coll_wire     = byType['wire'] || byType['wiretransfer'] || null;
+    const knownTypes = new Set(['ach','assetbacked','reverseconsolidation','mca','wire','wiretransfer']);
     row.mgmt_coll_other = Object.entries(byType)
       .filter(([t]) => !knownTypes.has(t))
       .reduce((a, [, v]) => a + v, 0) || null;
+    // mgmt_coll_ach: second "ACH" row — would need a separate payment-method column
+    // that neither sl nor sp currently surfaces; left null to avoid double-counting.
+    row.mgmt_coll_ach = null;
   }
 
   return row;
@@ -5252,14 +5301,23 @@ function buildKPITab(deals){
     }
   }
 
+  const mgmtByPeriod = buildMgmtByPeriod(STATE.groupBy);
   const dm = {}, wbd = {};
   periods.forEach(p => {
     dm[p]  = computeFSMetrics(byPeriod[p] || []);
-    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || []);
+    wbd[p] = enrichWbRow(getFSWbRow(p), byPeriod[p] || [], mgmtByPeriod[p]);
   });
   const periodDeals = periods.flatMap(p => byPeriod[p] || []);
   const allDm  = computeFSMetrics(periodDeals);
-  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals);
+  // Merge all-period mgmt buckets for the Total column
+  const allMgmtBucket = { sl: [], sp: [], af: [] };
+  periods.forEach(p => {
+    const mb = mgmtByPeriod[p] || {};
+    (mb.sl||[]).forEach(d => allMgmtBucket.sl.push(d));
+    (mb.sp||[]).forEach(d => allMgmtBucket.sp.push(d));
+    (mb.af||[]).forEach(d => allMgmtBucket.af.push(d));
+  });
+  const allWbd = enrichWbRow(getFSWbAllPeriods(periods), periodDeals, allMgmtBucket);
 
   const N = periods.length, showTotal = N > 1;
   const colLabels = periods.map(p => periodLabel(p, STATE.groupBy));
@@ -5510,8 +5568,9 @@ function buildFSVarianceTables(deals){
   const pLbl = periodLabel(pP, STATE.groupBy);
   if(sub) sub.textContent = `${cLbl} vs ${pLbl}`;
 
-  const cW = enrichWbRow(getFSWbRow(cP), byPeriod[cP] || []);
-  const pW = enrichWbRow(getFSWbRow(pP), byPeriod[pP] || []);
+  const mgmtByPeriod = buildMgmtByPeriod(STATE.groupBy);
+  const cW = enrichWbRow(getFSWbRow(cP), byPeriod[cP] || [], mgmtByPeriod[cP]);
+  const pW = enrichWbRow(getFSWbRow(pP), byPeriod[pP] || [], mgmtByPeriod[pP]);
   const cD = computeFSMetrics(byPeriod[cP] || []);
   const pD = computeFSMetrics(byPeriod[pP] || []);
 
