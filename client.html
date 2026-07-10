@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Metrics — Client View</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
+  #clientNav{
+    display:flex;align-items:center;gap:6px;padding:10px 16px;
+    background:#161b22;border-bottom:1px solid #30363d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  #clientNav .brand{font-size:14px;font-weight:700;color:#e6edf3;margin-right:14px;white-space:nowrap}
+  #clientNav button{
+    background:#1c2128;color:#8b949e;border:1px solid #30363d;border-radius:6px;
+    padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  #clientNav button:hover{border-color:#a78bfa;color:#e6edf3}
+  #clientNav button.active{background:#a78bfa;color:#fff;border-color:#a78bfa}
+  #appFrame{width:100%;height:calc(100% - 46px);border:0;display:block}
+  #loadingMsg{
+    position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;
+    justify-content:center;background:#0d1117;color:#8b949e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    font-size:14px;z-index:10;
+  }
+</style>
+</head>
+<body>
+
+<div id="loadingMsg">Loading…</div>
+
+<div id="clientNav" style="visibility:hidden">
+  <span class="brand">📊 Portfolio Metrics</span>
+  <button id="navFssummary" onclick="showClientTab('fssummary')">📋 FS Summary</button>
+  <button id="navMerchant" onclick="showClientTab('merchant')">🏪 Merchant Profitability</button>
+</div>
+<iframe id="appFrame" src="index.html" style="visibility:hidden"></iframe>
+
+<script>
+// ============================================================
+// CLIENT VIEW WRAPPER
+// ------------------------------------------------------------
+// This file makes NO changes to index.html. It loads the exact same,
+// unmodified application in an iframe and restricts what's visible from
+// the OUTSIDE, after the fact — every calculation, parser, COA mapping,
+// STATE object, filter, and the Publish to Project / fetchRemoteSync data
+// pipeline is the same running instance of the same code the internal app
+// uses. There is no separate implementation to keep in sync: any future
+// fix or feature shipped in index.html is automatically live here the next
+// time this page is opened.
+//
+// Requires being served over an actual origin (a web server / GitHub Pages/
+// etc.) in the same directory as index.html — opening this file directly
+// from disk (file://) may be blocked by the browser's cross-frame scripting
+// sandbox for local files, in which case the iframe will load but this
+// wrapper won't be able to reach into it to restrict the tabs.
+// ============================================================
+
+const ALLOWED_TABS = ['fssummary', 'merchant'];
+const frame = document.getElementById('appFrame');
+let wired = false;
+
+function wireClientView(){
+  if(wired) return;
+  const win = frame.contentWindow;
+  const doc = frame.contentDocument;
+  if(!win || !doc || typeof win.switchTab !== 'function') return;
+  wired = true;
+
+  // Hide the full internal tab bar and every tab's content except the two
+  // this view allows — pure CSS, nothing in index.html's own DOM is removed.
+  const style = doc.createElement('style');
+  style.textContent = `
+    .tabs { display: none !important; }
+    .tab-content { display: none !important; }
+    .tab-content.active { display: block !important; }
+    /* Clients shouldn't be steered into an upload flow with no visible tab for it */
+    #hdr button[onclick="switchTab('upload')"] { display: none !important; }
+    .entity-wrap { display: none !important; }
+    /* Persistent banners live outside .tab-content and reference hidden tabs
+       (e.g. "Sync to Repository" -> switchTab('share')) — hide them too. */
+    #snapDataBanner { display: none !important; }
+  `;
+  doc.head.appendChild(style);
+
+  // Defense in depth: index.html has other onclick="switchTab('...')" links scattered
+  // around outside the tab bar itself (e.g. the shared-snapshot banner's "Sync to
+  // Repository" link) that this wrapper can't practically enumerate and hide one by one.
+  // Rather than hunt down every such link, wrap switchTab itself so navigating to
+  // anything outside the two allowed tabs is simply a no-op — the CSS above only hides
+  // content, it doesn't stop a stray link from adding .active to a hidden tab-content.
+  const realSwitchTab = win.switchTab;
+  win.switchTab = function(t){
+    if(!ALLOWED_TABS.includes(t)) return;
+    realSwitchTab(t);
+    setClientNavActive(t);
+  };
+
+  // Default view
+  win.switchTab('fssummary');
+
+  document.getElementById('loadingMsg').style.display = 'none';
+  document.getElementById('clientNav').style.visibility = 'visible';
+  frame.style.visibility = 'visible';
+}
+
+function setClientNavActive(tab){
+  document.getElementById('navFssummary').classList.toggle('active', tab === 'fssummary');
+  document.getElementById('navMerchant').classList.toggle('active', tab === 'merchant');
+}
+
+function showClientTab(tab){
+  const win = frame.contentWindow;
+  if(!win || typeof win.switchTab !== 'function') return;
+  win.switchTab(tab); // wrapped in wireClientView(); already a no-op for disallowed tabs
+}
+
+frame.addEventListener('load', () => {
+  // index.html's own init (migrateState/buildAllViews/fetchRemoteSync) runs on its
+  // internal DOMContentLoaded, which fires before the iframe's 'load' event — so by
+  // the time we get here, switchTab and the rest of the app are ready to use. Poll
+  // briefly regardless, in case a slow embedded snapshot delays that.
+  let tries = 0;
+  const tick = () => {
+    wireClientView();
+    if(!wired && tries++ < 100) setTimeout(tick, 100);
+  };
+  tick();
+});
+</script>
+</body>
+</html>
